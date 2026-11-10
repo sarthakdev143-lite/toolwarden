@@ -1,0 +1,84 @@
+# Threat model
+
+What toolwarden is meant to stop, what it assumes, and where it stops helping.
+
+## The setup
+
+An AI app (the MCP client) connects to MCP servers. Each server offers tools. The model
+reads every tool's name, description and input schema, decides which tools to call, and
+reads what they return. The person using the app usually sees little of this.
+
+toolwarden sits between the client and each server and sees every message in both
+directions.
+
+## What we protect
+
+1. **The person's credentials and files**: SSH keys, cloud credentials, `.env` files, tokens.
+2. **The model's instructions**: what the model does should come from the person, not
+   from text a server slipped in.
+3. **The person's ability to know what happened**: a record of every tool call.
+
+## Who we defend against
+
+**A malicious or compromised MCP server.** It controls its tool definitions and its tool
+results, and it can change either at any time. This covers a server that was honest when
+installed and turned later (a rug-pull), whether through its author, a hijacked package
+update, or a compromised remote host.
+
+**Poisoned content passing through an honest server.** A web page, document, issue or
+email that an honest tool fetches can contain instructions aimed at the model.
+
+**A web page in the person's browser.** It can send requests to `127.0.0.1`, so it could
+try to reach the dashboard or the HTTP proxy.
+
+## What toolwarden does about each
+
+| Attack | Defence | Strength |
+|---|---|---|
+| A tool's definition changes after approval | Definitions are hashed on first use; a changed tool is hidden and its calls are blocked until approved | Strong: any change to the definition is detected |
+| A new tool appears later | It is quarantined until approved | Strong |
+| The model is talked into reading credentials | Calls whose arguments reference credential locations are denied | Partial: pattern matching on arguments |
+| A tool result carries instructions | Results are scanned; a notice is added, or the result is withheld | Partial: pattern matching on text |
+| A secret read through one server is sent out through another | Values returned by a server are fingerprinted and recognized in calls to other servers | Partial: distinctive tokens only |
+| A web page calls the dashboard or proxy | Local-only listening, Host and Origin checks, a random token for the dashboard, a strict content security policy | Strong |
+| A server's text attacks the dashboard itself | Server-supplied text is only ever written as text, never as HTML | Strong |
+
+## What we assume
+
+- **The machine and the user account are not already compromised.** Anything running as
+  the same user can edit `~/.toolwarden` or the client's config and remove the firewall.
+- **The MCP client honours what it is sent.** If the proxy hides a tool or returns an
+  error, the client shows the model that, and does not reach the server some other way.
+- **The first listing is reviewed or at least plausible.** See below.
+
+## Known limits
+
+**The first version of a tool is trusted.** Pinning detects change; it cannot tell that a
+definition was malicious from the start. The definition checks flag common tricks, but
+they warn and do not block.
+
+**Pattern checks can be evaded.** A determined attacker can encode, split or reword. The
+argument rules, result checks and flow tracking raise the cost of an attack and catch the
+common forms; they are not a proof of safety.
+
+**A server acts with whatever access it was given.** toolwarden governs what passes
+through the protocol. A local server that reads `~/.ssh` by itself, without being asked
+through a tool call, is not something a protocol proxy can see. Give servers the least
+access they need.
+
+**Annotating is advice.** In the default mode a suspicious result still reaches the model,
+with a notice in front. A model can still be fooled. `--results block` withholds it.
+
+**The audit log is local and editable.** It is a record for the person, not tamper-proof
+evidence.
+
+## Design choices that follow from this
+
+- **No runtime dependencies.** A firewall that pulls in a large dependency tree is itself
+  a supply-chain risk.
+- **`init --via npx` pins an exact version.** The tool that guards against silent changes
+  does not update itself silently.
+- **Nothing leaves the machine.** No telemetry and no network calls of its own.
+- **Secrets are not stored.** Credential-shaped values are removed from the audit log, and
+  flow tracking keeps only hashes.
+- **Fail closed where it is safe to.** A changed tool is blocked until someone decides.

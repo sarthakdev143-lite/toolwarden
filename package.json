@@ -1,18 +1,48 @@
 {
   "name": "toolwarden",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "A runtime firewall for MCP servers: pins tool definitions, blocks rug-pulls, enforces argument policies, and logs every tool call.",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "security",
+    "firewall",
+    "ai-agents",
+    "tool-poisoning",
+    "rug-pull",
+    "prompt-injection",
+    "llm-security",
+    "claude",
+    "cursor"
+  ],
+  "author": "Sarthak Parulekar",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sarthakdev143-lite/toolwarden.git"
+  },
+  "homepage": "https://github.com/sarthakdev143-lite/toolwarden#readme",
+  "bugs": {
+    "url": "https://github.com/sarthakdev143-lite/toolwarden/issues"
+  },
   "type": "module",
-  "bin": { "toolwarden": "dist/cli.js" },
-  "files": ["dist", "README.md", "LICENSE"],
+  "bin": {
+    "toolwarden": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc",
     "test": "npm run build && node --test test/*.test.mjs",
-    "demo": "npm run build && node examples/demo.mjs"
+    "demo": "npm run build && node examples/demo.mjs",
+    "prepublishOnly": "npm test"
   },
-  "engines": { "node": ">=18" },
-  "keywords": ["mcp", "model-context-protocol", "security", "firewall", "ai-agents", "tool-poisoning", "rug-pull"],
-  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "typescript": "^5.6.0"

@@ -24,6 +24,14 @@ class LineSplitter {
   }
 }
 
+/** Quote one argument for cmd.exe so spaces and shell characters stay literal. */
+export function quoteForWindowsShell(arg: string): string {
+  if (arg.length > 0 && !/[\s"&|<>^()%!,;=]/.test(arg)) return arg;
+  // Double any backslashes that come before a quote or the end, then escape the quotes.
+  const escaped = arg.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/, "$1$1");
+  return `"${escaped}"`;
+}
+
 function tryParse(line: string): { ok: true; value: unknown } | { ok: false } {
   try {
     return { ok: true, value: JSON.parse(line) };
@@ -38,7 +46,12 @@ function tryParse(line: string): { ok: true; value: unknown } | { ok: false } {
  */
 export function runProxy(firewall: Firewall, command: string, args: string[]): Promise<number> {
   return new Promise((resolve) => {
-    const child = spawn(command, args, { stdio: ["pipe", "pipe", "inherit"] });
+    // On Windows, commands such as npx are .cmd scripts, which can only be started
+    // through the shell. Arguments are quoted so the shell passes them on unchanged.
+    const child =
+      process.platform === "win32"
+        ? spawn([command, ...args].map(quoteForWindowsShell).join(" "), { stdio: ["pipe", "pipe", "inherit"], shell: true })
+        : spawn(command, args, { stdio: ["pipe", "pipe", "inherit"] });
     let settled = false;
     const finish = (code: number) => {
       if (settled) return;

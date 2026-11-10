@@ -28,17 +28,17 @@ toolwarden checks at runtime, every session.
 ## Quick start
 
 ```bash
-git clone https://github.com/sarthakdev143-lite/toolwarden && cd toolwarden
-npm install && npm run build
-
-node dist/cli.js init        # find your MCP servers and protect them
-node dist/cli.js dashboard   # watch what they do
+npx toolwarden init        # find your MCP servers and protect them
+npx toolwarden dashboard   # watch what they do
 ```
 
-Restart your MCP clients after `init`. To see the attack and the defence side by side first:
+Restart your MCP clients after `init`. Needs Node.js 18 or newer. `bunx toolwarden` and `pnpm dlx toolwarden` work the same way.
+
+To see the attack and the defence side by side first, run the demo from a checkout:
 
 ```bash
-npm run demo
+git clone https://github.com/sarthakdev143-lite/toolwarden && cd toolwarden
+npm install && npm run demo
 ```
 
 ## Setting up
@@ -62,9 +62,12 @@ It looks in the config files of Claude Desktop, Claude Code, Cursor, Windsurf, V
 | `toolwarden init --dry-run` | Only list what was found |
 | `toolwarden init --yes` | Protect everything without asking |
 | `toolwarden init --undo` | Take toolwarden out of the config files again |
+| `toolwarden init --upgrade` | Rewrite already-protected servers after you update toolwarden |
 | `toolwarden init --config <file>` | Use a config file in an unusual place |
 
 The original file is kept next to it as `<file>.toolwarden-backup`.
+
+When run through `npx`, `init` writes the exact version it was run with (for example `toolwarden@0.2.1`) into your config. That is deliberate: a tool that guards against silent changes should not update itself silently. To move to a newer version, run `npx toolwarden@latest init --upgrade`.
 
 ### By hand: local servers
 
@@ -87,8 +90,8 @@ After:
 {
   "mcpServers": {
     "files": {
-      "command": "node",
-      "args": ["/path/to/toolwarden/dist/cli.js", "run", "--name", "files", "--",
+      "command": "npx",
+      "args": ["-y", "toolwarden@0.2.1", "run", "--name", "files", "--",
                "npx", "-y", "@modelcontextprotocol/server-filesystem", "/home/me/project"]
     }
   }
@@ -208,9 +211,11 @@ A security tool should be clear about its limits.
 - **The checks are pattern matching.** Argument rules, result checks and flow tracking stop the obvious cases. Values that are encoded, split up, reworded, or built by the server itself can get past them. Flow tracking follows distinctive tokens (keys, IDs), not ordinary prose.
 - **A notice is advice to the model.** In the default `annotate` mode, suspicious output still reaches the model with a warning in front. Use `--results block` to withhold it.
 - **Remote servers that need a browser sign-in (OAuth)** are passed through, but the sign-in flow has not been tested through the proxy.
-- **Tested on Linux**, against the official filesystem and "everything" servers with the official MCP client. macOS should work. Windows has not been tested.
+- **Tested on Linux and macOS**, against the official filesystem and "everything" servers with the official MCP client. **Windows support is experimental.**
 
 It is one layer. Keep giving servers the least access they need, and be careful with servers you did not write.
+
+The full reasoning is in the [threat model](docs/threat-model.md). To report a security problem, see [SECURITY.md](SECURITY.md).
 
 ## Development
 
@@ -221,6 +226,8 @@ npm run demo
 ```
 
 The tests start the real proxy around fake MCP servers (stdio and HTTP) and check that blocked calls never reach them.
+
+Releases are published to npm by GitHub Actions when a version tag is pushed (`npm version patch && git push --follow-tags`). No npm token is stored; see `.github/workflows/release.yml`.
 
 ## License
 

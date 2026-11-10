@@ -2,7 +2,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, join, resolve } from "node:path";
+import { basename, dirname, join, resolve, sep } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 import { AuditLog } from "./audit.js";
@@ -15,7 +15,8 @@ import { approve, listServers, loadPins, savePins, slug, type PinFile } from "./
 import { loadPolicy, type Policy } from "./policy.js";
 import { runProxy } from "./proxy.js";
 
-const VERSION = "0.2.0";
+// The version lives in package.json only, so the two can never drift apart.
+const VERSION = (JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { version: string }).version;
 
 const HELP = `toolwarden ${VERSION} — a runtime firewall for MCP servers
 
@@ -46,7 +47,11 @@ Options for "init":
   --dry-run            Only list what was found
   --yes                Do not ask before changing files
   --undo               Remove toolwarden from the config files again
+  --upgrade            Rewrite servers that are already protected (after updating toolwarden)
   --config <file>      Only look at this config file
+  --via <npx|path>     How clients should start toolwarden: "npx" runs this exact version
+                       from npm; "path" runs this copy on disk. Default: npx when installed
+                       from npm, path when run from a source checkout.
 `;
 
 function fail(message: string): never {
@@ -327,7 +332,10 @@ function printScan(files: ScannedFile[]): { local: number; wrapped: number; remo
 }
 
 async function cmdInit(argv: string[]): Promise<number> {
-  const { values, bools, rest } = parseOptions(argv, ["--config"], ["--dry-run", "--yes", "--undo"]);
+  const { values, bools, rest } = parseOptions(argv, ["--config", "--via"], ["--dry-run", "--yes", "--undo", "--upgrade"]);
+  const via = values["--via"] ?? (fileURLToPath(import.meta.url).includes(`${sep}node_modules${sep}`) ? "npx" : "path");
+  if (via !== "npx" && via !== "path") fail('--via must be "npx" or "path"');
+  if (bools.has("--undo") && bools.has("--upgrade")) fail("use either --undo or --upgrade, not both");
   if (rest.length > 0) fail(`unexpected argument "${rest[0]}"`);
   const locations = values["--config"]
     ? [{ client: "Config", file: resolve(values["--config"]) }]
@@ -342,11 +350,18 @@ async function cmdInit(argv: string[]): Promise<number> {
   }
   const totals = printScan(files);
   const undo = bools.has("--undo");
-  const todo = undo ? totals.wrapped : totals.local;
+  const upgrade = bools.has("--upgrade");
+  const todo = undo ? totals.wrapped : upgrade ? totals.wrapped + totals.local : totals.local;
 
   if (bools.has("--dry-run")) return 0;
   if (todo === 0) {
-    console.log(undo ? "Nothing is wrapped by toolwarden." : "Every local server is already protected.");
+    console.log(
+      undo
+        ? "Nothing is wrapped by toolwarden."
+        : upgrade
+          ? "No local servers found to update."
+          : "Every local server is already protected.",
+    );
     return 0;
   }
 
@@ -358,7 +373,9 @@ async function cmdInit(argv: string[]): Promise<number> {
     const rl = createInterface({ input: process.stdin, output: process.stdout });
     const question = undo
       ? `Remove toolwarden from ${todo} server(s)? [y/N] `
-      : `Protect ${todo} server(s)? Each config file is backed up first. [y/N] `;
+      : upgrade
+        ? `Rewrite ${todo} server(s) to use toolwarden ${VERSION}? [y/N] `
+        : `Protect ${todo} server(s)? Each config file is backed up first. [y/N] `;
     const answer = (await rl.question(question)).trim().toLowerCase();
     rl.close();
     if (answer !== "y" && answer !== "yes") {
@@ -367,20 +384,38 @@ async function cmdInit(argv: string[]): Promise<number> {
     }
   }
 
-  // Start toolwarden through this exact Node binary and script, so it works
-  // from GUI apps whose PATH differs from the terminal's.
-  const launcher = [process.execPath, fileURLToPath(import.meta.url)];
+  // "path": start this copy through this exact Node binary, so it works from GUI
+  // apps whose PATH differs from the terminal's.
+  // "npx": start the published package at exactly this version. The version is
+  // pinned on purpose: a security tool should not update itself silently.
+  let launcher: string[];
+  if (via === "npx") {
+    const beside = join(dirname(process.execPath), process.platform === "win32" ? "npx.cmd" : "npx");
+    launcher = [existsSync(beside) ? beside : "npx", "-y", `toolwarden@${VERSION}`];
+  } else {
+    launcher = [process.execPath, fileURLToPath(import.meta.url)];
+  }
   const namer = makeNamer();
   let changedTotal = 0;
   for (const f of files) {
     if (f.error) continue;
-    const needsWork = f.servers.some((s) => s.kind === (undo ? "wrapped" : "local"));
-    if (!needsWork) continue;
+    const hasLocal = f.servers.some((s) => s.kind === "local");
+    const hasWrapped = f.servers.some((s) => s.kind === "wrapped");
+    if (undo ? !hasWrapped : upgrade ? !hasLocal && !hasWrapped : !hasLocal) continue;
     try {
-      const result = rewriteFile(f.file, undo ? "unwrap" : "wrap", launcher, (s) => namer(s, f.client));
-      changedTotal += result.changed.length;
-      console.log(`${undo ? "Restored" : "Protected"} in ${f.file}: ${result.changed.join(", ")}`);
-      if (result.backup) console.log(`  backup: ${result.backup}`);
+      const changed = new Set<string>();
+      let backup: string | null = null;
+      // An upgrade takes the old wrapper off and puts the current one on.
+      const steps: ("wrap" | "unwrap")[] = undo ? ["unwrap"] : upgrade ? ["unwrap", "wrap"] : ["wrap"];
+      for (const step of steps) {
+        const result = rewriteFile(f.file, step, launcher, (s) => namer(s, f.client));
+        result.changed.forEach((name) => changed.add(name));
+        backup ??= result.backup;
+      }
+      changedTotal += changed.size;
+      const verb = undo ? "Restored" : upgrade ? "Updated" : "Protected";
+      console.log(`${verb} in ${f.file}: ${[...changed].join(", ")}`);
+      if (backup) console.log(`  backup: ${backup}`);
     } catch (err) {
       console.log(`Could not update ${f.file}: ${(err as Error).message}`);
     }

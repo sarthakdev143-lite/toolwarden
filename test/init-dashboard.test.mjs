@@ -196,3 +196,27 @@ test("dashboard refuses requests from other sites", async () => {
     assert.equal(await status({ ...auth, host: `127.0.0.1:${port}`, origin: "https://evil.example" }), 403);
   });
 });
+
+test("init --via npx pins the exact version, --upgrade rewrites an older wrapper, and undo still restores", () => {
+  const dir = mkdtempSync(join(tmpdir(), "toolwarden-init-"));
+  const file = join(dir, "mcp.json");
+  const original = JSON.stringify({ mcpServers: { files: { command: "npx", args: ["-y", "some-server", "/tmp"] } } }, null, 2) + "\n";
+  writeFileSync(file, original);
+  const version = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
+
+  runCli(["init", "--config", file, "--yes", "--via", "path"]);
+  const viaPath = JSON.parse(readFileSync(file, "utf8")).mcpServers.files;
+  assert.equal(viaPath.command, process.execPath);
+
+  const upgraded = runCli(["init", "--config", file, "--yes", "--upgrade", "--via", "npx"]);
+  assert.match(upgraded.stdout, /Updated in .*mcp\.json: files/);
+  const viaNpx = JSON.parse(readFileSync(file, "utf8")).mcpServers.files;
+  assert.match(viaNpx.command, /npx(\.cmd)?$/);
+  assert.deepEqual(viaNpx.args, ["-y", `toolwarden@${version}`, "run", "--name", "files", "--", "npx", "-y", "some-server", "/tmp"]);
+
+  runCli(["init", "--config", file, "--undo", "--yes"]);
+  assert.equal(readFileSync(file, "utf8"), original);
+
+  const bad = runCli(["init", "--config", file, "--via", "curl"]);
+  assert.equal(bad.status, 2);
+});

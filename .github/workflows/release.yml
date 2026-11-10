@@ -1,0 +1,36 @@
+# Publishes to npm when a version tag is pushed:
+#
+#   npm version patch        # bumps package.json and creates the tag
+#   git push --follow-tags
+#
+# Uses npm "trusted publishing": npm accepts the package because it comes from
+# this workflow in this repository, so no npm token is stored anywhere.
+# One-time setup on npmjs.com: package Settings > Trusted Publisher > GitHub Actions,
+# with repository "sarthakdev143-lite/toolwarden" and workflow "release.yml".
+name: release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+  id-token: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      # Trusted publishing needs a recent npm.
+      - run: npm install -g npm@latest
+      - run: npm ci
+      - name: Check that the tag matches package.json
+        run: test "v$(node -p "require('./package.json').version")" = "$GITHUB_REF_NAME"
+      - run: npm test
+      - run: npm publish --access public
+      - name: Create the GitHub release
+        run: gh release create "$GITHUB_REF_NAME" --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}

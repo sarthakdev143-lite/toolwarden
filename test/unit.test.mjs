@@ -42,3 +42,13 @@ test("warn rules do not deny", () => {
   assert.equal(v.denied, null);
   assert.deepEqual(v.warnings.map((w) => w.ruleId), ["curl"]);
 });
+
+test("Windows shell quoting keeps arguments literal", async () => {
+  const { quoteForWindowsShell: q } = await import("../dist/proxy.js");
+  assert.equal(q("npx"), "npx");
+  assert.equal(q("C:\\Program Files\\nodejs\\npx.cmd"), '"C:\\Program Files\\nodejs\\npx.cmd"');
+  assert.equal(q("a&b"), '"a&b"');
+  assert.equal(q('say "hi"'), '"say \\"hi\\""');
+  assert.equal(q("C:\\dir with space\\"), '"C:\\dir with space\\\\"');
+  assert.equal(q(""), '""');
+});
