@@ -87,10 +87,18 @@ test("init finds known client configs, and a wrapped server really runs behind t
     cursorConfig,
     JSON.stringify({ mcpServers: { fake: { command: "node", args: [FAKE], env: { FAKE_TOOLS_FILE: box.toolsFile } } } }, null, 2),
   );
-  const env = { ...process.env, HOME: home, XDG_CONFIG_HOME: join(home, ".config"), TOOLWARDEN_HOME: box.state };
+  // HOME is the home folder on Linux and macOS; USERPROFILE and APPDATA are on Windows.
+  const env = {
+    ...process.env,
+    HOME: home,
+    USERPROFILE: home,
+    APPDATA: join(home, "AppData", "Roaming"),
+    XDG_CONFIG_HOME: join(home, ".config"),
+    TOOLWARDEN_HOME: box.state,
+  };
 
   const found = runCli(["init", "--dry-run"], { env, cwd: home });
-  assert.match(found.stdout, /Cursor\s+.*\.cursor\/mcp\.json/);
+  assert.match(found.stdout, /^Cursor\s+.*\.cursor[\\/]mcp\.json/m);
   assert.match(found.stdout, /fake\s+not protected/);
 
   const noTty = runCli(["init"], { env, cwd: home });
