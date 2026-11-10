@@ -1,0 +1,20 @@
+{
+  "name": "toolwarden",
+  "version": "0.2.0",
+  "description": "A runtime firewall for MCP servers: pins tool definitions, blocks rug-pulls, enforces argument policies, and logs every tool call.",
+  "type": "module",
+  "bin": { "toolwarden": "dist/cli.js" },
+  "files": ["dist", "README.md", "LICENSE"],
+  "scripts": {
+    "build": "tsc",
+    "test": "npm run build && node --test test/*.test.mjs",
+    "demo": "npm run build && node examples/demo.mjs"
+  },
+  "engines": { "node": ">=18" },
+  "keywords": ["mcp", "model-context-protocol", "security", "firewall", "ai-agents", "tool-poisoning", "rug-pull"],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0"
+  }
+}

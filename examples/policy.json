@@ -1,0 +1,9 @@
+{
+  "rules": [
+    { "id": "no-prod-db", "tool": "query_*", "pattern": "prod-db\\.internal", "message": "touches the production database" },
+    { "id": "curl-pipe", "pattern": "curl[^|]*\\|\\s*(ba)?sh", "action": "warn", "message": "pipes a download into a shell" }
+  ],
+  "flows": [
+    { "id": "no-secrets-to-web", "from": "*", "to": "web-*", "kind": "secret", "action": "deny" }
+  ]
+}
