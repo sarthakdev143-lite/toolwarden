@@ -16,7 +16,7 @@ interface Check {
 const CHECKS: Check[] = [
   {
     id: "invisible-characters",
-    pattern: /[​-‏‪-‮⁠-⁤﻿]|[\u{E0000}-\u{E007F}]/u,
+    pattern: /[\u200B\u200C\u200E\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]|[\u{E0000}-\u{E007F}]/u,
     message: "contains invisible or text-direction characters, which can hide instructions from a human reviewer",
   },
   {
