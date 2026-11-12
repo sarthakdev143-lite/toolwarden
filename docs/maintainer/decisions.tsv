@@ -13,3 +13,7 @@ ts	phase	decision	why	evidence	result
 2026-11-12T23:49:10Z	red	ls ~/.ssh && tar was allowed	the .ssh rule required the directory to end the argument or be followed by a slash	test/unit.test.mjs	failed as expected
 2026-11-12T23:49:10Z	green	that command is denied and the full suite passes	notes.ssh and .sshconfig still pass	npm test	37 pass, 0 fail
 2026-11-12T23:49:10Z	review	comment review found no new comments to remove	the diff is the rule and the tests	comment review on the diff	0 deletions
+2026-11-12T23:53:02Z	merge	merged the SSH directory fix after 5 CI checks passed	commands that name ~/.ssh and keep going are denied on Linux, macOS, and Windows	https://github.com/sarthakdev143-lite/toolwarden/pull/3	merged ba28e63
+2026-11-12T23:53:02Z	red	a bidi isolate in a tool description was not flagged, and the old class included the zero-width joiner	the definition check used a source range that skipped U+2066 to U+2069 and included U+200D	test/unit.test.mjs	failed as expected
+2026-11-12T23:53:02Z	green	isolates are flagged, emoji joiners are not, and the full suite passes	the check is a warning on the definition the reviewer reads	npm test	37 pass, 0 fail
+2026-11-12T23:53:02Z	review	comment review found no new comments to remove	the diff is the character class and two assertions	comment review on the diff	0 deletions
