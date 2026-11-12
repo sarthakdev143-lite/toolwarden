@@ -9,3 +9,7 @@ ts	phase	decision	why	evidence	result
 2026-11-12T23:46:22Z	red	a command that mentions .env or .npmrc and then more text was allowed	the built-in rules only matched when the credential path was the entire argument	test/proxy.test.mjs	failed as expected
 2026-11-12T23:46:22Z	green	those calls are denied and the full suite passes	environment.ts and filename.env still go through	npm test	37 pass, 0 fail
 2026-11-12T23:46:22Z	review	restored 6 comments the first review deleted outside this change	a credential-rule fix should not also sweep old notes	second comment review, 0 deletions	in scope
+2026-11-12T23:49:10Z	merge	merged the credential-path fix after 5 CI checks passed	the .env and token-file commands were denied on Linux, macOS, and Windows	https://github.com/sarthakdev143-lite/toolwarden/pull/2	merged cfdd0b2
+2026-11-12T23:49:10Z	red	ls ~/.ssh && tar was allowed	the .ssh rule required the directory to end the argument or be followed by a slash	test/unit.test.mjs	failed as expected
+2026-11-12T23:49:10Z	green	that command is denied and the full suite passes	notes.ssh and .sshconfig still pass	npm test	37 pass, 0 fail
+2026-11-12T23:49:10Z	review	comment review found no new comments to remove	the diff is the rule and the tests	comment review on the diff	0 deletions

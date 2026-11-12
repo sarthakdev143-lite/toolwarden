@@ -38,7 +38,7 @@ export interface PolicyFile {
 export const DEFAULT_RULES: Rule[] = [
   {
     id: "ssh-keys",
-    pattern: "(^|[\\\\/])\\.ssh([\\\\/]|$)|\\bid_(rsa|ed25519|ecdsa|dsa)\\b",
+    pattern: "(^|[\\\\/])\\.ssh($|[^\\w.-])|\\bid_(rsa|ed25519|ecdsa|dsa)\\b",
     message: "references SSH keys",
   },
   {
