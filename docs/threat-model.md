@@ -55,7 +55,10 @@ try to reach the dashboard or the HTTP proxy.
 
 **The first version of a tool is trusted.** Pinning detects change; it cannot tell that a
 definition was malicious from the start. The definition checks flag common tricks, but
-they warn and do not block.
+they warn and do not block. That first listing can span pages, but only along the cursor
+the server just issued, and only for 32 pages. A server that always advertises another
+page does not keep the first-use window open, and a call to a tool that was never listed
+is blocked.
 
 **Pattern checks can be evaded.** A determined attacker can encode, split or reword. The
 argument rules, result checks and flow tracking raise the cost of an attack and catch the

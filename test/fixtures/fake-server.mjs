@@ -11,6 +11,21 @@ function send(msg) {
   process.stdout.write(JSON.stringify(msg) + "\n");
 }
 
+function listResult(cursor) {
+  const raw = JSON.parse(readFileSync(toolsFile, "utf8"));
+  if (Array.isArray(raw)) {
+    const result = { tools: raw };
+    if (process.env.FAKE_NEXT_CURSOR) result.nextCursor = process.env.FAKE_NEXT_CURSOR;
+    return result;
+  }
+  const pages = Array.isArray(raw?.pages) ? raw.pages : [];
+  const index = typeof cursor === "string" && cursor !== "" ? Number.parseInt(cursor, 10) : 0;
+  const tools = Number.isInteger(index) && Array.isArray(pages[index]) ? pages[index] : [];
+  const result = { tools };
+  if (Number.isInteger(index) && index + 1 < pages.length) result.nextCursor = String(index + 1);
+  return result;
+}
+
 let buffer = "";
 process.stdin.on("data", (chunk) => {
   buffer += chunk.toString("utf8");
@@ -35,8 +50,7 @@ function handle(msg) {
       },
     });
   } else if (msg.method === "tools/list") {
-    const tools = JSON.parse(readFileSync(toolsFile, "utf8"));
-    send({ jsonrpc: "2.0", id: msg.id, result: { tools } });
+    send({ jsonrpc: "2.0", id: msg.id, result: listResult(msg.params?.cursor) });
   } else if (msg.method === "tools/call") {
     if (callsFile) appendFileSync(callsFile, JSON.stringify(msg.params) + "\n");
     send({

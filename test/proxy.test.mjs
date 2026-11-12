@@ -55,13 +55,13 @@ function sandbox(tools) {
 }
 
 /** Start the proxy around the fake server and talk to it like an MCP client would. */
-function session(box, extraArgs = []) {
+function session(box, extraArgs = [], env = {}) {
   const child = spawn(
     "node",
     [CLI, "run", "--name", "fake", "--state", box.state, ...extraArgs, "--", "node", FAKE],
     {
       stdio: ["pipe", "pipe", "pipe"],
-      env: { ...process.env, FAKE_TOOLS_FILE: box.toolsFile, FAKE_CALLS_FILE: box.callsFile },
+      env: { ...process.env, FAKE_TOOLS_FILE: box.toolsFile, FAKE_CALLS_FILE: box.callsFile, ...env },
     },
   );
   let stderr = "";
@@ -178,6 +178,110 @@ test("status shows the change and approve unblocks it", async () => {
   const res = await third.call("add", { a: 2, b: 2 });
   assert.equal(res.result.isError, false);
   await third.close();
+});
+
+test("a server that never ends its first page cannot approve tools it adds later", async () => {
+  const box = sandbox([ADD]);
+  const s = session(box, [], { FAKE_NEXT_CURSOR: "more" });
+  try {
+    const first = await s.request("tools/list", {});
+    assert.equal(first.result.nextCursor, "more");
+    assert.deepEqual(first.result.tools.map((t) => t.name), ["add"]);
+
+    const sneaky = await s.call("read_file", { path: "notes.txt" });
+    assert.equal(sneaky.result.isError, true);
+    assert.match(sneaky.result.content[0].text, /Blocked by toolwarden/);
+
+    box.setTools([ADD, READ_FILE]);
+    const second = await s.request("tools/list", {});
+    assert.deepEqual(
+      second.result.tools.map((t) => t.name),
+      ["add"],
+      "a tool added on a later listing stays hidden",
+    );
+    const blocked = await s.call("read_file", { path: "notes.txt" });
+    assert.equal(blocked.result.isError, true);
+  } finally {
+    await s.close();
+  }
+
+  assert.equal(box.serverCalls().length, 0, "neither call reached the server");
+  assert.match(s.stderr(), /appeared on "fake" after you first approved/);
+});
+
+test("the first listing may span pages, and a tool added after that listing is quarantined", async () => {
+  const exfil = { name: "exfil", description: "Send data.", inputSchema: { type: "object" } };
+  const box = sandbox({ pages: [[ADD], [READ_FILE]] });
+  const s = session(box);
+  try {
+    const page1 = await s.request("tools/list", {});
+    assert.deepEqual(page1.result.tools.map((t) => t.name), ["add"]);
+    assert.equal(page1.result.nextCursor, "1");
+    const page2 = await s.request("tools/list", { cursor: page1.result.nextCursor });
+    assert.deepEqual(page2.result.tools.map((t) => t.name), ["read_file"]);
+    assert.equal(page2.result.nextCursor, undefined);
+    assert.equal(
+      box.audit().some((r) => r.event === "tool_removed"),
+      false,
+      "finishing the first listing is not a removal",
+    );
+
+    box.setTools([ADD, READ_FILE, exfil]);
+    assert.deepEqual(await s.listTools(), ["add", "read_file"]);
+    const blocked = await s.call("exfil", {});
+    assert.equal(blocked.result.isError, true);
+    const ok = await s.call("add", { a: 1, b: 1 });
+    assert.equal(ok.result.isError, false);
+  } finally {
+    await s.close();
+  }
+  assert.deepEqual(box.serverCalls().map((c) => c.name), ["add"]);
+});
+
+test("a first listing longer than 32 pages does not pin the tools past that bound", async () => {
+  const pages = Array.from({ length: 33 }, (_, i) => [
+    { name: `tool_${i}`, description: `Tool ${i}.`, inputSchema: { type: "object" } },
+  ]);
+  const box = sandbox({ pages });
+  const s = session(box);
+  const seen = [];
+  try {
+    let cursor;
+    for (;;) {
+      const res = await s.request("tools/list", cursor === undefined ? {} : { cursor });
+      seen.push(...res.result.tools.map((t) => t.name));
+      if (typeof res.result.nextCursor !== "string") break;
+      cursor = res.result.nextCursor;
+    }
+  } finally {
+    await s.close();
+  }
+
+  assert.ok(seen.includes("tool_0"));
+  assert.ok(!seen.includes("tool_32"), "page 33 is past the first-use bound and stays hidden");
+  const pins = JSON.parse(readFileSync(join(box.state, "pins", "fake.json"), "utf8"));
+  assert.equal(pins.tools.tool_31 !== undefined, true);
+  assert.equal(pins.tools.tool_32, undefined);
+  assert.equal(pins.pending.tool_32.kind, "new");
+});
+
+test("a tool that disappears from a later listing is recorded", async () => {
+  const box = sandbox([ADD, READ_FILE]);
+  const first = session(box);
+  try {
+    assert.deepEqual(await first.listTools(), ["add", "read_file"]);
+  } finally {
+    await first.close();
+  }
+
+  box.setTools([ADD]);
+  const second = session(box);
+  try {
+    assert.deepEqual(await second.listTools(), ["add"]);
+  } finally {
+    await second.close();
+  }
+  assert.ok(box.audit().some((r) => r.event === "tool_removed" && r.tool === "read_file"));
 });
 
 test("a tool added after first approval is quarantined", async () => {
