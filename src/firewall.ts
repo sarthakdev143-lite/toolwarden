@@ -14,6 +14,8 @@ export type Mode = "block" | "warn";
  */
 export type ResultMode = "off" | "warn" | "annotate" | "block";
 
+const MAX_TRUST_PAGES = 32;
+
 export interface FirewallOptions {
   server: string;
   command: string;
@@ -58,12 +60,11 @@ export interface ClientDecision {
  */
 export class Firewall {
   private readonly pins: PinFile;
-  /**
-   * True until the first complete tool listing from a server we have never
-   * seen. During that window tools are pinned on trust ("trust on first use").
-   */
   private trustOpen: boolean;
+  private expectedCursor: string | null = null;
+  private trustPages = 0;
   private readonly pendingLists = new Set<string>();
+  private readonly listCursors = new Map<string, string | null>();
   private readonly pendingCalls = new Map<string, string>();
   private readonly listedThisCycle = new Set<string>();
   private readonly alerted = new Set<string>();
@@ -89,7 +90,11 @@ export class Firewall {
     if (!isObject(msg) || typeof msg.method !== "string") return { forward: true };
 
     if (msg.method === "tools/list" && "id" in msg) {
-      this.pendingLists.add(idKey(scope, msg.id));
+      const key = idKey(scope, msg.id);
+      this.pendingLists.add(key);
+      const params = isObject(msg.params) ? msg.params : {};
+      const cursor = typeof params.cursor === "string" && params.cursor !== "" ? params.cursor : null;
+      this.listCursors.set(key, cursor);
       return { forward: true };
     }
 
@@ -121,7 +126,7 @@ export class Firewall {
         pending.kind === "changed"
           ? `the tool "${name}" changed its definition after it was approved`
           : `the tool "${name}" was added after the server was first approved and has not been reviewed`;
-    } else if (!this.trustOpen && !this.pins.tools[name]) {
+    } else if (!this.pins.tools[name]) {
       pinProblem = `the tool "${name}" is not in the approved tool list for this server`;
     }
 
@@ -242,9 +247,12 @@ export class Firewall {
 
     if (this.pendingLists.has(key)) {
       this.pendingLists.delete(key);
+      const requestedCursor = this.listCursors.get(key) ?? null;
+      this.listCursors.delete(key);
       const result = msg.result;
       if (!isObject(result) || !Array.isArray(result.tools)) return null;
-      const kept = this.checkListing(result.tools, typeof result.nextCursor === "string" && result.nextCursor !== "");
+      const nextCursor = typeof result.nextCursor === "string" && result.nextCursor !== "" ? result.nextCursor : null;
+      const kept = this.checkListing(result.tools, requestedCursor, nextCursor);
       if (kept.length === result.tools.length) return null;
       return { ...msg, result: { ...result, tools: kept } };
     }
@@ -309,13 +317,30 @@ export class Firewall {
     return { ...msg, result: { ...result, content: [notice, ...content] } };
   }
 
-  private checkListing(tools: unknown[], morePages: boolean): unknown[] {
+  private endTrust(): boolean {
+    if (!this.trustOpen) return false;
+    this.trustOpen = false;
+    this.opts.audit.alert(
+      `First use of "${this.opts.server}": pinned ${Object.keys(this.pins.tools).length} tool definition(s). ` +
+        `Any later change will be blocked until you approve it.`,
+      { event: "pinned", count: Object.keys(this.pins.tools).length },
+    );
+    return true;
+  }
+
+  private checkListing(tools: unknown[], requestedCursor: string | null, nextCursor: string | null): unknown[] {
     const { server, audit } = this.opts;
     const blocking = this.opts.mode === "block";
     const now = new Date().toISOString();
     const kept: unknown[] = [];
     let dirty = false;
     let pinnedNow = 0;
+
+    const continuation = this.expectedCursor !== null && requestedCursor === this.expectedCursor;
+    if (!continuation) {
+      this.listedThisCycle.clear();
+      if (this.trustOpen && Object.keys(this.pins.tools).length > 0 && this.endTrust()) dirty = true;
+    }
 
     for (const tool of tools) {
       const name = isObject(tool) ? tool.name : undefined;
@@ -371,16 +396,17 @@ export class Firewall {
       if (!blocking) kept.push(tool);
     }
 
-    if (!morePages) {
-      if (this.trustOpen) {
-        this.trustOpen = false;
-        dirty = true;
-        audit.alert(
-          `First use of "${server}": pinned ${Object.keys(this.pins.tools).length} tool definition(s). ` +
-            `Any later change will be blocked until you approve it.`,
-          { event: "pinned", count: Object.keys(this.pins.tools).length },
-        );
-      } else if (pinnedNow === 0) {
+    let justClosed = false;
+    if (this.trustOpen) {
+      this.trustPages++;
+      if (nextCursor === null || this.trustPages >= MAX_TRUST_PAGES) justClosed = this.endTrust();
+    }
+    if (justClosed) dirty = true;
+
+    if (nextCursor !== null) {
+      this.expectedCursor = nextCursor;
+    } else {
+      if (!justClosed && !this.trustOpen && pinnedNow === 0) {
         for (const name of Object.keys(this.pins.tools)) {
           const key = "removed:" + name;
           if (!this.listedThisCycle.has(name) && !this.alerted.has(key)) {
@@ -390,6 +416,8 @@ export class Firewall {
         }
       }
       this.listedThisCycle.clear();
+      this.expectedCursor = null;
+      this.trustPages = 0;
     }
 
     if (dirty) savePins(this.opts.stateDir, this.pins);
