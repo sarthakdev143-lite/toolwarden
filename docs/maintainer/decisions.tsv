@@ -5,3 +5,7 @@ ts	phase	decision	why	evidence	result
 2026-11-12T23:25:08Z	red	new proxy tests failed on the old code	an unlisted call was allowed, and page 33 was pinned	test/proxy.test.mjs	failed as expected
 2026-11-12T23:25:08Z	green	same tests pass, full suite 37 passed	the proxy is the artifact the user runs	npm test	37 pass, 0 fail
 2026-11-12T23:25:08Z	review	deleted 9 comments that only restated the tests and the threat model	the behavior is already forced by the proxy tests and written in the threat model	comment review on the diff	comments removed, tests still 37 pass
+2026-11-12T23:46:22Z	merge	merged the first-use fix to main after 5 CI checks passed	linux, macOS, and Windows all passed, including the experimental Windows job	https://github.com/sarthakdev143-lite/toolwarden/pull/1	merged e909196
+2026-11-12T23:46:22Z	red	a command that mentions .env or .npmrc and then more text was allowed	the built-in rules only matched when the credential path was the entire argument	test/proxy.test.mjs	failed as expected
+2026-11-12T23:46:22Z	green	those calls are denied and the full suite passes	environment.ts and filename.env still go through	npm test	37 pass, 0 fail
+2026-11-12T23:46:22Z	review	restored 6 comments the first review deleted outside this change	a credential-rule fix should not also sweep old notes	second comment review, 0 deletions	in scope

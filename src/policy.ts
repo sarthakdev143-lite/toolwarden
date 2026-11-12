@@ -48,12 +48,12 @@ export const DEFAULT_RULES: Rule[] = [
   },
   {
     id: "env-files",
-    pattern: "(^|[\\\\/])\\.env(\\.[\\w.-]+)?$",
+    pattern: "(^|[\\\\/])\\.env(\\.[\\w.-]+)?($|[^\\w.-])",
     message: "references a .env file",
   },
   {
     id: "package-tokens",
-    pattern: "(^|[\\\\/])\\.(npmrc|pypirc|netrc|git-credentials)$",
+    pattern: "(^|[\\\\/])\\.(npmrc|pypirc|netrc|git-credentials)($|[^\\w.-])",
     message: "references a file that stores access tokens",
   },
 ];
