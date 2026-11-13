@@ -21,3 +21,7 @@ ts	phase	decision	why	evidence	result
 2026-11-13T00:11:32Z	red	a poisoned resources/read result reached the client with no notice	only tools/call results were scanned, so a document or prompt could carry the same instructions	test/results-flow.test.mjs	failed as expected, 1 content item instead of 2
 2026-11-13T00:11:32Z	green	resource and prompt results get the same notice or withhold as tool output	the notice is placed in contents or messages, which is what the client shows the model	npm test	38 pass, 0 fail
 2026-11-13T00:11:32Z	review	comment review removed one private narration	the three result shapes are visible in the function body	comment review on the diff	1 deletion
+2026-11-13T00:17:26Z	merge	merged resource and prompt result scanning after 5 CI checks passed	a poisoned document or prompt gets a notice, or is withheld	https://github.com/sarthakdev143-lite/toolwarden/pull/5	merged f2da71b
+2026-11-13T00:17:26Z	red	a resources/read of an SSH key returned the key material to the client	credential rules ran only on tools/call, so a resource URI or prompt argument bypassed them	test/results-flow.test.mjs	failed as expected, the client received PRIVATE KEY MATERIAL
+2026-11-13T00:17:26Z	green	credential resource reads and prompt arguments are denied before they reach the server	ordinary documents and prompts still pass, and the same rules as tool calls apply	npm test	39 pass, 0 fail
+2026-11-13T00:17:26Z	review	comment review removed one private narration	the call site already shows which requests are checked	comment review on the diff	1 deletion

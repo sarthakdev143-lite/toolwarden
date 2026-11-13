@@ -52,10 +52,12 @@ function handle(msg) {
   } else if (msg.method === "tools/list") {
     send({ jsonrpc: "2.0", id: msg.id, result: listResult(msg.params?.cursor) });
   } else if (msg.method === "resources/read") {
+    if (callsFile) appendFileSync(callsFile, JSON.stringify({ method: msg.method, params: msg.params }) + "\n");
     const uri = typeof msg.params?.uri === "string" ? msg.params.uri : "file://doc";
     const text = typeof msg.params?.text === "string" ? msg.params.text : "a plain document";
     send({ jsonrpc: "2.0", id: msg.id, result: { contents: [{ uri, mimeType: "text/plain", text }] } });
   } else if (msg.method === "prompts/get") {
+    if (callsFile) appendFileSync(callsFile, JSON.stringify({ method: msg.method, params: msg.params }) + "\n");
     const text = typeof msg.params?.text === "string" ? msg.params.text : "a plain prompt";
     send({
       jsonrpc: "2.0",

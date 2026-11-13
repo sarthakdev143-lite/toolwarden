@@ -68,6 +68,40 @@ test("a resource or a prompt that looks like instructions gets the same notice a
   }
 });
 
+test("a resource read or prompt argument that names credentials never reaches the server", async () => {
+  const box = sandbox([ECHO]);
+  const s = session(box);
+  try {
+    const ssh = await s.request("resources/read", { uri: "file:///home/me/.ssh/id_rsa", text: "PRIVATE KEY MATERIAL" });
+    assert.match(ssh.result.contents[0].text, /Blocked by toolwarden policy/);
+    assert.doesNotMatch(JSON.stringify(ssh.result), /PRIVATE KEY MATERIAL/);
+
+    const ok = await s.request("resources/read", { uri: "file:///home/me/project/README.md", text: "project readme" });
+    assert.equal(ok.result.contents[0].text, "project readme");
+
+    const env = await s.request("prompts/get", {
+      name: "summarize",
+      arguments: { path: "/home/me/.env" },
+      text: "SECRET TOKEN VALUE",
+    });
+    assert.match(env.result.messages[0].content.text, /Blocked by toolwarden policy/);
+    assert.doesNotMatch(JSON.stringify(env.result), /SECRET TOKEN VALUE/);
+
+    const plain = await s.request("prompts/get", { name: "summarize", arguments: { note: "hello" }, text: "a plain prompt" });
+    assert.equal(plain.result.messages[0].content.text, "a plain prompt");
+  } finally {
+    await s.close();
+  }
+
+  assert.deepEqual(
+    box.serverCalls().map((c) => [c.method, c.params?.uri ?? c.params?.name]),
+    [
+      ["resources/read", "file:///home/me/project/README.md"],
+      ["prompts/get", "summarize"],
+    ],
+  );
+});
+
 test("--results block withholds suspicious output; --results off leaves it alone", async () => {
   const box = sandbox([ECHO]);
   const blocking = session(box, ["--results", "block"]);
