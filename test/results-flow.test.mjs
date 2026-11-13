@@ -796,6 +796,31 @@ test("flow: a credential carried outside the arguments object is reported", asyn
   assert.equal(JSON.stringify(box.audit()).includes(FAKE_TOKEN), false);
 });
 
+test("flow: a credential in a sampling request is recognized when another server is asked to send it", async () => {
+  const box = sandbox([ECHO, SEND]);
+  const prompt = { messages: [{ role: "user", content: { type: "text", text: `the token is ${FAKE_TOKEN}` } }] };
+  const vault = session(box, ["--results", "off"], "vault");
+  try {
+    await vault.listTools();
+    await vault.request("test/sampling", prompt);
+    await vault.call("send", { body: FAKE_TOKEN });
+  } finally {
+    await vault.close();
+  }
+  assert.doesNotMatch(vault.stderr(), /returned \d+ minute/);
+
+  const web = session(box, [], "web");
+  try {
+    await web.listTools();
+    const res = await web.call("send", { body: `posting ${FAKE_TOKEN}` });
+    assert.equal(res.result.isError, false, "by default a flow is reported, not blocked");
+  } finally {
+    await web.close();
+  }
+  assert.match(web.stderr(), /WARNING call to "send" on "web" carries a credential that server "vault" returned/);
+  assert.equal(JSON.stringify(box.audit()).includes(FAKE_TOKEN), false);
+});
+
 test("flow: a credential shown in a log or progress update is recognized when another server is asked to send it", async () => {
   const box = sandbox([ECHO, SEND]);
   const vault = session(box, ["--results", "off"], "vault");
