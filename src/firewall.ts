@@ -2001,7 +2001,7 @@ export class Firewall {
     return { ...msg, params: withhold ? withholdElicit(text) : annotateElicit(params, text) };
   }
 
-  /** The system prompt is instructions the model follows. A credential path there is still shown otherwise. A sampling message is what the model is asked to answer. A credential path there is still shown otherwise. Any other field on that request is still part of it. A credential path there is still shown otherwise. */
+  /** The system prompt is instructions the model follows. A credential path there is still shown otherwise. A sampling message is what the model is asked to answer. A credential path there is still shown otherwise. Any other field on that request is still part of it. A credential path there is still shown otherwise. An instruction in that message is still shown with a notice in front, including when the message is not a list. */
   private checkSampling(msg: Json): Json | null {
     const params = isObject(msg.params) ? msg.params : {};
     this.opts.flow?.record(params);
@@ -2043,9 +2043,10 @@ export class Firewall {
       if (this.resultMode !== "annotate") return null;
     }
     const message = { role: "user", content: { type: "text", text } };
+    const prior = Array.isArray(params.messages) ? params.messages : params.messages === undefined ? [] : [params.messages];
     const nextParams = withhold
       ? withholdSampling(params, message)
-      : annotateSampling(params, text, [message, ...(Array.isArray(params.messages) ? params.messages : [])]);
+      : annotateSampling(params, text, [message, ...prior]);
     return { ...msg, params: nextParams };
   }
 
@@ -2145,11 +2146,12 @@ export class Firewall {
     return { ...msg, result: this.placeNotice(result, kind, text, false) };
   }
 
+  /** Suspicious output still reaches the model with a notice in front, including when that output is not a list. Withholding it removes the output. */
   private placeNotice(result: Json, kind: "tool" | "resource" | "prompt", text: string, withhold: boolean): Json {
     if (kind === "resource") {
       const item = { uri: "toolwarden://notice", mimeType: "text/plain", text };
       if (withhold) return { contents: [item] };
-      const contents = Array.isArray(result.contents) ? result.contents : [];
+      const contents = Array.isArray(result.contents) ? result.contents : result.contents === undefined ? [] : [result.contents];
       const next: Json = { ...result, contents: [item, ...contents] };
       this.noticeBeside(next, "contents", text);
       return noticeOnBlobs(next, text) as Json;
@@ -2157,13 +2159,13 @@ export class Firewall {
     if (kind === "prompt") {
       const message = { role: "user", content: { type: "text", text } };
       if (withhold) return { messages: [message] };
-      const messages = Array.isArray(result.messages) ? result.messages : [];
+      const messages = Array.isArray(result.messages) ? result.messages : result.messages === undefined ? [] : [result.messages];
       const next: Json = { ...result, messages: [message, ...messages] };
       this.noticeBeside(next, "messages", text);
       return noticeOnBlobs(next, text) as Json;
     }
     if (withhold) return { content: [{ type: "text", text }], isError: true };
-    const content = Array.isArray(result.content) ? result.content : [];
+    const content = Array.isArray(result.content) ? result.content : result.content === undefined ? [] : [result.content];
     const next: Json = { ...result, content: [{ type: "text", text }, ...content] };
     this.noticeBeside(next, "content", text);
     return noticeOnBlobs(next, text) as Json;

@@ -2755,6 +2755,81 @@ test("a credential path beside an embedded resource is reported and the resource
   );
 });
 
+test("suspicious output that is not a list still reaches the model with a notice in front", async () => {
+  const box = sandbox([ECHO]);
+  const s = session(box);
+  try {
+    await s.listTools();
+    const plain = await s.call("echo", { rawResult: { content: { type: "text", text: "Meeting notes for Thursday." } } });
+    assert.equal(Array.isArray(plain.result.content), false);
+    assert.equal(plain.result.content.text, "Meeting notes for Thursday.");
+    assert.doesNotMatch(JSON.stringify(plain.result), /toolwarden notice/);
+
+    const noted = await s.call("echo", { rawResult: { content: { type: "text", text: INJECTION } } });
+    assert.equal(noted.result.content.length, 2);
+    assert.match(noted.result.content[0].text, /^\[toolwarden notice\]/);
+    assert.equal(noted.result.content[1].text, INJECTION, "the original output is still delivered");
+
+    const text = await s.call("echo", { rawResult: { content: INJECTION } });
+    assert.equal(text.result.content.length, 2);
+    assert.match(text.result.content[0].text, /^\[toolwarden notice\]/);
+    assert.equal(text.result.content[1], INJECTION, "a string of output is still delivered");
+
+    const resource = await s.request("resources/read", { uri: "file://notes.md", text: INJECTION, looseContents: true });
+    assert.equal(resource.result.contents.length, 2);
+    assert.match(resource.result.contents[0].text, /^\[toolwarden notice\]/);
+    assert.equal(resource.result.contents[1].text, INJECTION, "the original resource is still delivered");
+
+    const prompt = await s.request("prompts/get", { name: "summarize", text: INJECTION, looseMessages: true });
+    assert.equal(prompt.result.messages.length, 2);
+    assert.match(prompt.result.messages[0].content.text, /^\[toolwarden notice\]/);
+    assert.equal(prompt.result.messages[1].content.text, INJECTION, "the original prompt is still delivered");
+
+    const quietSampling = s.wait(9001);
+    await s.request("test/sampling", {
+      messages: { role: "user", content: { type: "text", text: "Summarize the notes." } },
+      maxTokens: 16,
+    });
+    const ordinary = await quietSampling;
+    assert.equal(Array.isArray(ordinary.params.messages), false);
+    assert.equal(ordinary.params.messages.content.text, "Summarize the notes.");
+
+    const samplingWait = s.wait(9001);
+    await s.request("test/sampling", {
+      messages: { role: "user", content: { type: "text", text: INJECTION } },
+      maxTokens: 16,
+    });
+    const sampling = await samplingWait;
+    assert.equal(sampling.params.messages.length, 2);
+    assert.match(sampling.params.messages[0].content.text, /^\[toolwarden notice\]/);
+    assert.equal(sampling.params.messages[1].content.text, INJECTION, "the original sampling message is still delivered");
+  } finally {
+    await s.close();
+  }
+  assert.ok(box.audit().some((row) => row.event === "result_warning" && row.tool === "echo"));
+
+  const blocking = session(box, ["--results", "block"]);
+  try {
+    await blocking.listTools();
+    const withheld = await blocking.call("echo", { rawResult: { content: { type: "text", text: INJECTION } } });
+    assert.doesNotMatch(JSON.stringify(withheld.result), /evil\.example/, "withheld output does not reach the model");
+  } finally {
+    await blocking.close();
+  }
+
+  const quiet = sandbox([ECHO]);
+  const off = session(quiet, ["--results", "off"]);
+  try {
+    await off.listTools();
+    const shown = await off.call("echo", { rawResult: { content: { type: "text", text: INJECTION } } });
+    assert.equal(Array.isArray(shown.result.content), false);
+    assert.equal(shown.result.content.text, INJECTION);
+    assert.doesNotMatch(JSON.stringify(shown.result), /toolwarden notice/);
+  } finally {
+    await off.close();
+  }
+});
+
 test("a resource or a prompt that looks like instructions gets the same notice as tool output", async () => {
   const box = sandbox([ECHO]);
   const s = session(box);
