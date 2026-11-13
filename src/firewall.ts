@@ -1641,7 +1641,7 @@ export class Firewall {
     return { ...base, result: nextResult };
   }
 
-  /** A list item, a definition reply, a field beside a list, a sampling system prompt, a sampling message, any other field on a sampling request, the method on a server message, the protocol version, a value that is not a JSON-RPC object, the id of a server message, a field beside a server message, parameters that are not an object, a result or an error on a server request or notification, a progress token, an elicitation question, a resource update, any other server notice, a cancellation id, a prompt result, including one that is not an object, the uri of a returned resource, a field beside that resource, or a field beside tool output is still part of what the model reads. A credential path there is still shown otherwise. */
+  /** A list item, a definition reply, a field beside a list, a sampling system prompt, a sampling message, any other field on a sampling request, the method on a server message, the protocol version, a value that is not a JSON-RPC object, the id of a server message, a field beside a server message, parameters that are not an object, a result or an error on a server request or notification, a progress token, an elicitation question, a resource update, any other server notice, a cancellation id, a prompt result, including one that is not an object, the uri of a returned resource, including one that is not a list, a field beside that resource, or a field beside tool output is still part of what the model reads. A credential path there is still shown otherwise. */
   private warnLooseDefinition(item: unknown, label: string): void {
     const shown = scanResult(item);
     const findings = scanTool(item).filter((finding) => !shown.some((have) => have.id === finding.id));
@@ -2049,7 +2049,7 @@ export class Firewall {
     return { ...msg, params: nextParams };
   }
 
-  /** A prompt result is text the model follows. An instruction there is still shown otherwise. A credential path there is still shown otherwise. The uri on a returned resource says which resource the text came from. A credential path there is still shown otherwise. A field beside that resource, other than the document text, is still part of what the model reads. A credential path there is still shown otherwise. A field beside tool output, other than the content the tool returned, is still part of what the model reads. A credential path there is still shown otherwise. */
+  /** A prompt result is text the model follows. An instruction there is still shown otherwise. A credential path there is still shown otherwise. The uri on a returned resource says which resource the text came from, including when the resource is not a list. A credential path there is still shown otherwise. A field beside that resource, other than the document text, is still part of what the model reads. A credential path there is still shown otherwise. A field beside tool output, other than the content the tool returned, is still part of what the model reads. A credential path there is still shown otherwise. */
   private checkResult(msg: Json, result: Json, label: string, kind: "tool" | "resource" | "prompt"): Json | null {
     const { server, audit } = this.opts;
     this.opts.flow?.record(result);
@@ -2079,10 +2079,11 @@ export class Firewall {
       for (const [key, value] of Object.entries(result)) {
         if (key !== "contents") side[key] = value;
       }
-      if (Array.isArray(result.contents)) {
+      const contents = Array.isArray(result.contents) ? result.contents : isObject(result.contents) ? [result.contents] : null;
+      if (contents !== null) {
         const uris: unknown[] = [];
         const items: Json[] = [];
-        for (const item of result.contents) {
+        for (const item of contents) {
           if (!isObject(item)) continue;
           if ("uri" in item) uris.push(item.uri);
           const itemSide: Json = {};

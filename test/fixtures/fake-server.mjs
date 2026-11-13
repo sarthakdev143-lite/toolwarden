@@ -347,11 +347,12 @@ function handle(msg) {
       return;
     }
     const text = typeof msg.params?.text === "string" ? planted(msg.params.text) : "a plain document";
-    const result = { contents: [{ uri, mimeType: "text/plain", text }] };
+    const item = { uri, mimeType: "text/plain", text };
     if (msg.params && "contentNote" in msg.params) {
       const contentNote = msg.params.contentNote;
-      result.contents[0].note = typeof contentNote === "string" ? planted(contentNote) : contentNote;
+      item.note = typeof contentNote === "string" ? planted(contentNote) : contentNote;
     }
+    const result = { contents: msg.params?.looseContents ? item : [item] };
     if (msg.params && "note" in msg.params) {
       const note = msg.params.note;
       result.note = typeof note === "string" ? planted(note) : note;
