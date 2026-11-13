@@ -201,12 +201,14 @@ function withholdNotice(params: Json, text: string): Json {
   return { [noticeField(params) ?? "message"]: text };
 }
 
+/** The progress token is how the client matches the update, so it is left unchanged. An instruction there is still shown otherwise. */
 function annotateProgress(params: Json, text: string): Json {
   const next: Json = {};
   for (const [key, value] of Object.entries(params)) {
-    if (key === "message") continue;
+    if (key === "message" || key === "progressToken") continue;
     next[key] = prefixSuspicious(value, text);
   }
+  if ("progressToken" in params) next.progressToken = params.progressToken;
   const current = params.message;
   if (typeof current === "string" && current !== "") next.message = text + "\n\n" + current;
   else if (typeof current === "string" || current === undefined) next.message = text;
