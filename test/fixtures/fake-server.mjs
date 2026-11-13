@@ -75,6 +75,11 @@ function noteMarked(msg) {
 }
 
 function handle(msg) {
+  if (msg === null || typeof msg !== "object" || Array.isArray(msg)) {
+    if (callsFile) appendFileSync(callsFile, JSON.stringify({ bare: msg }) + "\n");
+    if (Array.isArray(msg)) for (const item of msg) handle(item);
+    return;
+  }
   if (msg.method === "initialize") {
     noteMarked(msg);
     if (msg.params && msg.params.error && typeof msg.params.error === "object") {

@@ -3790,6 +3790,74 @@ test("a credential path in non-object parameters never reaches the server", asyn
   assert.match(JSON.stringify(box.serverCalls()), /marker-array-warn/);
 });
 
+test("a credential path in a client value that is not a JSON-RPC object never reaches the server", async () => {
+  const box = sandbox([ECHO]);
+  const ssh = "file:///home/me/.ssh/id_rsa";
+  const encoded = "file:///home/me/%2essh/%69d_rsa";
+  const s = session(box);
+  try {
+    await s.listTools();
+    s.send(ssh);
+    s.send(encoded);
+    s.send([ssh]);
+    s.send(["note\n" + ssh]);
+    const kept = s.wait("batch-keep");
+    s.send([
+      { jsonrpc: "2.0", id: "batch-keep", method: "tools/call", params: { name: "echo", arguments: { echo: "marker-batch-keep" } } },
+      ssh,
+    ]);
+    const reply = await kept;
+    assert.equal(reply.result.content[0].text, "marker-batch-keep");
+    s.send(["marker-bare-ok", 1, null, false]);
+    const ok = await s.call("echo", { echo: "marker-after-bare" });
+    assert.equal(ok.result.content[0].text, "marker-after-bare");
+  } finally {
+    await s.close();
+  }
+  const calls = JSON.stringify(box.serverCalls());
+  assert.doesNotMatch(calls, /id_rsa|%2essh|\.ssh/);
+  assert.match(calls, /marker-bare-ok/);
+  assert.match(calls, /marker-batch-keep/);
+  assert.match(calls, /marker-after-bare/);
+  assert.match(s.stderr(), /DENIED request "value"/);
+
+  const warning = session(box, ["--mode", "warn"]);
+  try {
+    await warning.listTools();
+    warning.send(ssh);
+    const delivered = await warning.call("echo", { echo: "marker-bare-warn" });
+    assert.equal(delivered.result.content[0].text, "marker-bare-warn");
+  } finally {
+    await warning.close();
+  }
+  assert.match(warning.stderr(), /warn mode, not blocked/);
+  assert.match(JSON.stringify(box.serverCalls()), /id_rsa/);
+});
+
+test("flow: a credential in a client value that is not a JSON-RPC object is reported when another server is asked to send it", async () => {
+  const box = sandbox([ECHO, SEND]);
+  const vault = session(box, ["--results", "off"], "vault");
+  try {
+    await vault.listTools();
+    await vault.request("test/batch", { batch: [`your token is ${FAKE_TOKEN}`] });
+  } finally {
+    await vault.close();
+  }
+
+  const web = session(box, [], "web");
+  try {
+    await web.listTools();
+    web.send(`posting ${FAKE_TOKEN} marker-bare-flow`);
+    const res = await web.call("send", { body: "ordinary" });
+    assert.equal(res.result.isError, false, "by default a flow is reported, not blocked");
+  } finally {
+    await web.close();
+  }
+  assert.match(web.stderr(), /WARNING request to "value" on "web" carries a credential that server "vault" returned/);
+  assert.match(JSON.stringify(box.serverCalls()), /marker-bare-flow/);
+  assert.equal(JSON.stringify(box.audit()).includes(FAKE_TOKEN), false);
+});
+
 test("a credential path in a request id never reaches the server", async () => {
   const box = sandbox([ECHO]);
   const ssh = "file:///home/me/.ssh/id_rsa";
