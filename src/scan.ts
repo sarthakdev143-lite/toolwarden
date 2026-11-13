@@ -60,7 +60,12 @@ export function decodedBlob(value: string): string | null {
   return text;
 }
 
-/** Includes text stored in a base64 blob. */
+function encodedText(key: string, value: unknown): string | null {
+  if ((key !== "blob" && key !== "data") || typeof value !== "string") return null;
+  return decodedBlob(value);
+}
+
+/** Includes text stored in a base64 blob or in image and audio data. */
 export function collectText(value: unknown): string[] {
   const out: string[] = [];
   collectStrings(value, out);
@@ -75,25 +80,21 @@ function collectStrings(value: unknown, out: string[]): void {
   } else if (value !== null && typeof value === "object") {
     for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
       collectStrings(v, out);
-      if (key === "blob" && typeof v === "string") {
-        const text = decodedBlob(v);
-        if (text !== null) out.push(text);
-      }
+      const text = encodedText(key, v);
+      if (text !== null) out.push(text);
     }
   }
 }
 
-/** Put the notice inside a blob whose decoded text is suspicious, so a client that decodes it sees the notice first. */
+/** Put the notice inside base64 text (a resource blob, or image and audio data) when that text is suspicious. */
 export function noticeOnBlobs(value: unknown, notice: string): unknown {
   if (Array.isArray(value)) return value.map((item) => noticeOnBlobs(item, notice));
   if (value !== null && typeof value === "object") {
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>).map(([key, v]) => {
-        if (key === "blob" && typeof v === "string") {
-          const text = decodedBlob(v);
-          if (text !== null && scanResult(text).length > 0) {
-            return [key, Buffer.from(notice + "\n\n" + text, "utf8").toString("base64")];
-          }
+        const text = encodedText(key, v);
+        if (text !== null && scanResult(text).length > 0) {
+          return [key, Buffer.from(notice + "\n\n" + text, "utf8").toString("base64")];
         }
         return [key, noticeOnBlobs(v, notice)];
       }),

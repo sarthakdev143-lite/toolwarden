@@ -39,8 +39,8 @@ try to reach the dashboard or the HTTP proxy.
 | A review approves a definition that changed again | The dashboard pins a tool only when its hash is still the one on the page; otherwise the whole request is refused | Strong |
 | A new tool appears later | It is quarantined until approved | Strong |
 | The model is talked into reading credentials | Tool calls, resource URIs and prompt arguments that reference credential locations, including database password files, Terraform credentials, Kubernetes service-account tokens, and rclone configs, are denied | Partial: pattern matching on arguments |
-| A tool, resource or prompt result carries instructions | Results, structured tool output, tool errors, and text stored in a base64 resource blob are scanned; a notice is added, or the text is withheld. Descriptions in resource, prompt, and resource-template listings are reported. A sampling request, a question the server asks the user, and the server's introduction are treated the same way | Partial: pattern matching on text |
-| A secret read through one server is sent out through another | Values returned by a server, including text stored in a base64 blob, are fingerprinted and recognized in calls, resource reads, prompt arguments, and answers to another server's question | Partial: distinctive tokens only |
+| A tool, resource or prompt result carries instructions | Results, structured tool output, tool errors, and text stored in a base64 resource blob or in image or audio data are scanned; a notice is added, or the text is withheld. Descriptions in resource, prompt, and resource-template listings are reported. A sampling request, a question the server asks the user, and the server's introduction are treated the same way | Partial: pattern matching on text |
+| A secret read through one server is sent out through another | Values returned by a server, including text stored in a base64 blob or in image or audio data, are fingerprinted and recognized in calls, resource reads, prompt arguments, and answers to another server's question | Partial: distinctive tokens only |
 | A web page calls the dashboard or proxy | Local-only listening, Host and Origin checks, a random token for the dashboard, a strict content security policy | Strong |
 | A server's text attacks the dashboard itself | Server-supplied text is only ever written as text, never as HTML | Strong |
 
@@ -62,7 +62,7 @@ page does not keep the first-use window open, and a call to a tool that was neve
 is blocked.
 
 **Pattern checks can be evaded.** One layer of percent-encoding is decoded before the
-checks, and one layer of base64 is decoded for a resource blob. A determined attacker
+checks, and one layer of base64 is decoded for a resource blob and for image and audio data. A determined attacker
 can encode another way, split or reword. The argument rules, result checks and flow
 tracking raise the cost of an attack and catch the common forms; they are not a proof
 of safety.
