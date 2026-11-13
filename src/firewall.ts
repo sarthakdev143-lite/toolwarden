@@ -351,11 +351,17 @@ export class Firewall {
             return sided;
           }
         }
-        if (this.rootsIdsAwaitingAnswer.delete(id) && "result" in msg) {
-          const loose = this.looseRoots(msg);
-          if (loose) return loose;
-          const rewritten = this.foldRootsSide(msg, this.rewriteRoots(msg));
-          if (rewritten) return { forward: true, send: rewritten };
+        if (this.rootsIdsAwaitingAnswer.has(id)) {
+          this.rootsIdsAwaitingAnswer.delete(id);
+          if ("result" in msg) {
+            const loose = this.looseRoots(msg);
+            if (loose) return loose;
+            const rewritten = this.foldRootsSide(msg, this.rewriteRoots(msg));
+            if (rewritten) return { forward: true, send: rewritten };
+          } else {
+            const erred = this.rootsError(msg);
+            if (erred) return erred;
+          }
         }
         if (this.elicitationIdsAwaitingAnswer.delete(id)) {
           const body = "result" in msg ? msg.result : "error" in msg ? msg.error : undefined;
@@ -777,6 +783,14 @@ export class Firewall {
       id: request.id,
       result: { content: [{ type: "text", text }], isError: true },
     };
+  }
+
+  /** An error answering a filesystem-root request is still an answer. A credential path there still reaches the server otherwise. */
+  private rootsError(msg: Json): ClientDecision | null {
+    if (!("error" in msg)) return null;
+    const denied = this.policyDecision(msg, "roots", "other", msg.error, "roots/list");
+    if (denied) return denied;
+    return this.flowDecision(msg, "roots", "answer", msg.error);
   }
 
   /** A filesystem root that is not an array is still an answer. A credential path there still reaches the server otherwise. */
