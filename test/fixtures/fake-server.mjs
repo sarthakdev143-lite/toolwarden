@@ -113,6 +113,8 @@ function handle(msg) {
       result.structuredContent = msg.params.arguments.structured;
     }
     send({ jsonrpc: "2.0", id: msg.id, result });
+  } else if (msg.method === undefined && msg.id !== undefined && msg.result !== undefined) {
+    if (callsFile) appendFileSync(callsFile, JSON.stringify(msg) + "\n");
   } else if (msg.id !== undefined) {
     send({ jsonrpc: "2.0", id: msg.id, error: { code: -32601, message: "Method not found" } });
   }
