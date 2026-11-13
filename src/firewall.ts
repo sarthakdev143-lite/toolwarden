@@ -554,7 +554,7 @@ export class Firewall {
     };
   }
 
-  /** A roots reply with credential paths has those roots removed before the server sees it. An ordinary list is left unchanged. */
+  /** A roots reply with a credential path, or a root a flow rule denies, has that root removed before the server sees it. An ordinary list is left unchanged. */
   private rewriteRoots(msg: Json): Json | null {
     const result = isObject(msg.result) ? msg.result : null;
     if (!result || !Array.isArray(result.roots)) return null;
@@ -590,6 +590,36 @@ export class Firewall {
           `WARNING root "${label}" on "${server}" ${verdict.denied.message} (rule ${verdict.denied.ruleId}; warn mode, not blocked).`,
           { event: "call_warning", tool: label, rule: verdict.denied.ruleId, reason: verdict.denied.message },
         );
+      }
+      let dropped = false;
+      for (const hit of this.opts.flow?.check(root) ?? []) {
+        const what = hit.kind === "secret" ? "a credential" : "a value";
+        const reason = `carries ${what} that server "${hit.from}" returned ${minutes(hit.ageMs)} ago`;
+        const { action, ruleId } = this.opts.policy.evaluateFlow(hit.from, server, hit.kind);
+        const rec = { tool: label, from: hit.from, kind: hit.kind, rule: ruleId };
+        if (action === "deny" && blocking) {
+          audit.alert(`DENIED root "${label}" on "${server}": it ${reason} (flow rule ${ruleId}).`, {
+            event: "flow_denied",
+            ...rec,
+            args: summarizeArgs(root),
+          });
+          dropped = true;
+          break;
+        }
+        if (action === "log") {
+          audit.record({ event: "flow", ...rec });
+        } else {
+          const suffix = action === "deny" ? " (warn mode, not blocked)" : "";
+          audit.alert(`WARNING root "${label}" on "${server}" ${reason}${suffix}.`, {
+            event: "flow",
+            ...rec,
+            warned: true,
+          });
+        }
+      }
+      if (dropped) {
+        changed = true;
+        continue;
       }
       kept.push(root);
     }

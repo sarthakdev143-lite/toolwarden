@@ -13,9 +13,9 @@ import { collectText } from "./scan.js";
  * shows a tool definition, a catalog description, an introduction, a completion
  * suggestion, a completion error, or a cancellation, or returns text, we remember
  * fingerprints (hashes, never the values) of the distinctive tokens in it. When
- * a call to a *different* server carries one of those tokens in its arguments,
- * that is a data flow between servers: the pattern behind "read a secret with
- * one tool, send it out with another".
+ * a call to a *different* server carries one of those tokens in its arguments
+ * or in a filesystem root, that is a data flow between servers: the pattern
+ * behind "read a secret with one tool, send it out with another".
  */
 
 export type FlowKind = "secret" | "value";
@@ -107,7 +107,7 @@ export class FlowTracker {
     }
   }
 
-  /** Do these call arguments contain something another server returned recently? */
+  /** Does this value contain something another server returned recently? */
   check(args: unknown): FlowHit[] {
     const { secrets, values } = extractFingerprints(args);
     if (secrets.length === 0 && values.length === 0) return [];
