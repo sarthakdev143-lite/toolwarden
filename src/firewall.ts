@@ -326,6 +326,13 @@ export class Firewall {
         const elicitAnswer = this.elicitationIdsAwaitingAnswer.has(id);
         const samplingAnswer = this.samplingIdsAwaitingAnswer.has(id);
         const asked = this.unknownRequestsAwaitingAnswer.get(id);
+        const outstanding =
+          this.rootsIdsAwaitingAnswer.has(id) || elicitAnswer || samplingAnswer || asked !== undefined;
+        if (!outstanding) {
+          const loose = this.checkLoose(msg);
+          if (loose) return loose;
+          return { forward: true };
+        }
         if (rootAnswer || elicitAnswer || samplingAnswer || asked !== undefined) {
           const label = rootAnswer ? "roots" : elicitAnswer ? "elicitation" : samplingAnswer ? "sampling" : (asked ?? "answer");
           const toolName = rootAnswer
@@ -376,6 +383,9 @@ export class Firewall {
             if (flowed) return flowed;
           }
         }
+      } else {
+        const loose = this.checkLoose(msg);
+        if (loose) return loose;
       }
       return { forward: true };
     }
@@ -475,6 +485,24 @@ export class Firewall {
       this.unknownClientRequestsAwaitingReply.set(idKey(scope, msg.id), visibleLabel(msg.method));
     }
     return decision;
+  }
+
+  /**
+   * Policy and flow for a client message that is not a request and not the answer
+   * to an outstanding question. A credential path there still reaches the server otherwise.
+   */
+  private checkLoose(msg: Json): ClientDecision | null {
+    const body: Json = {};
+    for (const [key, value] of Object.entries(msg)) {
+      if (key === "jsonrpc") continue;
+      body[key] = value;
+    }
+    if (Object.keys(body).length === 0) return null;
+    const denied = this.policyDecision(msg, "response", "other", body, "response");
+    if (denied) return denied;
+    const flowed = this.flowDecision(msg, "response", "answer", body);
+    if (flowed) return flowed;
+    return null;
   }
 
   /** Policy and flow for a field beside the result or error of an answer to the server. */
