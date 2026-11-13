@@ -115,14 +115,14 @@ function encodedText(key: string, value: unknown): string | null {
   return decodedBlob(value);
 }
 
-/** Includes text stored in a base64 blob (URL-safe, unpadded, or written with a compatibility or invisible character), including when that blob is a list or an object, including an object in that list and an object inside that object, and an object inside that blob object, including an object inside that one, in image and audio data, including when that data is a list or an object, including an object in that list and an object inside that object, and an object inside that data object, including an object inside that one, and in object keys. */
+/** Includes text stored in a base64 blob (URL-safe, unpadded, or written with a compatibility or invisible character), including when that blob is a list or an object, including an object in that list and an object inside that object, and an object inside that blob object, including an object inside that one, and in a list in that blob object, in image and audio data, including when that data is a list or an object, including an object in that list and an object inside that object, and an object inside that data object, including an object inside that one, and in object keys. */
 export function collectText(value: unknown): string[] {
   const out: string[] = [];
   collectStrings(value, out, false);
   return out;
 }
 
-function collectStrings(value: unknown, out: string[], decode: boolean, decodeItems = false, decodeNested = false, extra = false): void {
+function collectStrings(value: unknown, out: string[], decode: boolean, decodeItems = false, decodeNested = false, extra = false, blobLists = false): void {
   if (typeof value === "string") {
     out.push(value);
     if (decode) {
@@ -133,8 +133,9 @@ function collectStrings(value: unknown, out: string[], decode: boolean, decodeIt
   }
   if (Array.isArray(value)) {
     for (const item of value) {
-      if (typeof item === "string" || Array.isArray(item)) collectStrings(item, out, decode, decodeItems, decodeNested, extra);
-      else collectStrings(item, out, decodeItems, false, decodeNested, extra);
+      if (typeof item === "string") collectStrings(item, out, decode, decodeItems, decodeNested, extra, false);
+      else if (Array.isArray(item)) collectStrings(item, out, blobLists ? false : decode, decodeItems, decodeNested, extra, false);
+      else collectStrings(item, out, decodeItems, false, decodeNested, extra, false);
     }
     return;
   }
@@ -144,8 +145,9 @@ function collectStrings(value: unknown, out: string[], decode: boolean, decodeIt
       const inDecodedList = (key === "data" || key === "blob") && Array.isArray(v);
       const inDecodedObject = (key === "data" || key === "blob") && objectValue;
       const nestedObject = decodeNested && objectValue;
-      const child = key === "data" || key === "blob" || ((decode || decodeNested) && typeof v === "string") || nestedObject;
-      collectStrings(v, out, child, inDecodedList, inDecodedList || inDecodedObject || (extra && nestedObject), inDecodedObject);
+      const listed = blobLists && Array.isArray(v);
+      const child = key === "data" || key === "blob" || ((decode || decodeNested) && typeof v === "string") || nestedObject || listed;
+      collectStrings(v, out, child, inDecodedList, inDecodedList || inDecodedObject || (extra && nestedObject), inDecodedObject, (key === "blob" && objectValue) || listed);
       out.push(key);
     }
   }
