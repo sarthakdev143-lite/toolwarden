@@ -115,7 +115,7 @@ function encodedText(key: string, value: unknown): string | null {
   return decodedBlob(value);
 }
 
-/** Includes text stored in a base64 blob (URL-safe, unpadded, or written with a compatibility or invisible character), including when that blob is a list or an object, including an object in that list and an object inside that object, and an object inside that blob object, including an object inside that one, and in a list in that blob object, including a list in that list, including a list in that one, including a list in that one as well, in image and audio data, including when that data is a list or an object, including an object in that list and an object inside that object, and an object inside that data object, including an object inside that one, and in a list in that data object, including a list in that list, including a list in that one, and in object keys. */
+/** Includes text stored in a base64 blob (URL-safe, unpadded, or written with a compatibility or invisible character), including when that blob is a list or an object, including an object in that list and an object inside that object, and an object inside that blob object, including an object inside that one, and in a list in that blob object, including a list in that list, including a list in that one, including a list in that one as well, in image and audio data, including when that data is a list or an object, including an object in that list and an object inside that object, and an object inside that data object, including an object inside that one, and in a list in that data object, including a list in that list, including a list in that one, including a list in that one as well, and in object keys. */
 export function collectText(value: unknown): string[] {
   const out: string[] = [];
   collectStrings(value, out, false);
@@ -151,8 +151,7 @@ function collectStrings(value: unknown, out: string[], decode: boolean, decodeIt
       const nestedObject = decodeNested && objectValue;
       const listed = objectLists && Array.isArray(v);
       const decodedObject = (key === "blob" || key === "data") && objectValue;
-      const blobObject = key === "blob" && objectValue;
-      const nextDeeper = blobObject ? 2 : ((key === "data" && objectValue) ? 1 : (listed ? deeperLists : 0));
+      const nextDeeper = decodedObject ? 2 : (listed ? deeperLists : 0);
       const child = key === "data" || key === "blob" || ((decode || decodeNested) && typeof v === "string") || nestedObject || listed;
       collectStrings(v, out, child, inDecodedList, inDecodedList || inDecodedObject || (extra && nestedObject), inDecodedObject, decodedObject || listed, decodedObject || (listed && nestedLists), nextDeeper);
       out.push(key);
