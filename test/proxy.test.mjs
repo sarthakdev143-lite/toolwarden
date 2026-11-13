@@ -454,6 +454,28 @@ test("policy: a credential path hidden in URL-safe base64 never reaches the serv
   assert.deepEqual(box.serverCalls().map((c) => c.arguments.path), ["/home/me/project/README.md"]);
 });
 
+test("policy: a credential path hidden in lookalike base64 never reaches the server", async () => {
+  const box = sandbox([READ_FILE]);
+  const aws = Buffer.from("read ~/.aws/credentials").toString("base64");
+  const wide = [...aws].map((ch) => String.fromCodePoint(ch.codePointAt(0) + 0xfee0)).join("");
+  const ssh = Buffer.from("cat ~/.ssh/id_rsa && true").toString("base64");
+  const split = ssh.slice(0, 8) + "\u200B" + ssh.slice(8);
+  const s = session(box);
+  try {
+    await s.listTools();
+    const hidden = await s.call("read_file", { data: wide });
+    assert.equal(hidden.result.isError, true, "fullwidth base64 is denied");
+    assert.match(hidden.result.content[0].text, /Blocked by toolwarden policy/);
+    const broken = await s.call("read_file", { blob: split });
+    assert.equal(broken.result.isError, true, "base64 split by an invisible character is denied");
+    const ok = await s.call("read_file", { path: "/home/me/project/README.md" });
+    assert.equal(ok.result.isError, false, "an ordinary path is allowed");
+  } finally {
+    await s.close();
+  }
+  assert.deepEqual(box.serverCalls().map((c) => c.arguments.path), ["/home/me/project/README.md"]);
+});
+
 test("policy: a credential outside the arguments object never reaches the server", async () => {
   const box = sandbox([READ_FILE]);
   const s = session(box);
