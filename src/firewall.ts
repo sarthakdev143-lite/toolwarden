@@ -355,11 +355,15 @@ export class Firewall {
     }
 
     if (msg.method === "initialize" && "id" in msg) {
+      const sided = this.sideDecision(msg);
+      if (sided) return sided;
       this.pendingInits.add(idKey(scope, msg.id));
       return { forward: true };
     }
 
     if (msg.method === "tools/list" && "id" in msg) {
+      const sided = this.sideDecision(msg);
+      if (sided) return sided;
       const key = idKey(scope, msg.id);
       this.pendingLists.add(key);
       const params = isObject(msg.params) ? msg.params : {};
@@ -372,6 +376,8 @@ export class Firewall {
       (msg.method === "resources/list" || msg.method === "prompts/list" || msg.method === "resources/templates/list") &&
       "id" in msg
     ) {
+      const sided = this.sideDecision(msg);
+      if (sided) return sided;
       const kind: CatalogKind =
         msg.method === "resources/list" ? "resource" : msg.method === "prompts/list" ? "prompt" : "template";
       this.pendingCatalogs.set(idKey(scope, msg.id), kind);
@@ -379,6 +385,8 @@ export class Firewall {
     }
 
     if (msg.method === "tools/call") {
+      const sided = this.sideDecision(msg);
+      if (sided) return sided;
       const decision = this.checkCall(msg);
       const name = isObject(msg.params) ? msg.params.name : undefined;
       if (decision.forward && "id" in msg && typeof name === "string") {
@@ -388,6 +396,8 @@ export class Firewall {
     }
 
     if ((msg.method === "resources/read" || msg.method === "prompts/get") && "id" in msg) {
+      const sided = this.sideDecision(msg);
+      if (sided) return sided;
       const params = isObject(msg.params) ? msg.params : {};
       const label =
         msg.method === "resources/read"
@@ -408,6 +418,8 @@ export class Firewall {
     }
 
     if (msg.method === "completion/complete" && "id" in msg) {
+      const sided = this.sideDecision(msg);
+      if (sided) return sided;
       const params = isObject(msg.params) ? msg.params : {};
       const argument = isObject(params.argument) ? params.argument : {};
       const name = typeof argument.name === "string" && argument.name !== "" ? argument.name : "completion";
@@ -420,6 +432,8 @@ export class Firewall {
     }
 
     if (msg.method === "resources/subscribe" || msg.method === "resources/unsubscribe") {
+      const sided = this.sideDecision(msg);
+      if (sided) return sided;
       const params = isObject(msg.params) ? msg.params : {};
       const uri = typeof params.uri === "string" && params.uri !== "" ? params.uri : "resource";
       const denied = this.policyDecision(msg, visibleLabel(uri), "subscribe", params);
@@ -435,6 +449,22 @@ export class Firewall {
       this.unknownClientRequestsAwaitingReply.set(idKey(scope, msg.id), visibleLabel(msg.method));
     }
     return decision;
+  }
+
+  /** Policy and flow for a field beside `params` on a method this firewall already handles. */
+  private sideDecision(msg: Json): ClientDecision | null {
+    const body: Json = {};
+    for (const [key, value] of Object.entries(msg)) {
+      if (key === "jsonrpc" || key === "id" || key === "method" || key === "params") continue;
+      body[key] = value;
+    }
+    if (Object.keys(body).length === 0) return null;
+    const label = visibleLabel(typeof msg.method === "string" ? msg.method : "request");
+    const denied = this.policyDecision(msg, label, "other", body);
+    if (denied) return denied;
+    const flowed = this.flowDecision(msg, label, "other", body);
+    if (flowed) return flowed;
+    return null;
   }
 
   private checkUnhandled(msg: Json): ClientDecision {

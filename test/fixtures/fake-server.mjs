@@ -11,6 +11,15 @@ function send(msg) {
   process.stdout.write(JSON.stringify(msg) + "\n");
 }
 
+function envelope(base, msg) {
+  const seen = { ...base };
+  for (const [key, value] of Object.entries(msg)) {
+    if (key === "jsonrpc" || key === "id" || key === "method" || key === "params") continue;
+    seen[key] = value;
+  }
+  return seen;
+}
+
 function listResult(cursor) {
   const raw = JSON.parse(readFileSync(toolsFile, "utf8"));
   if (Array.isArray(raw)) {
@@ -140,7 +149,7 @@ function handle(msg) {
       send({ jsonrpc: "2.0", id: msg.id, result: {} });
     }
   } else if (msg.method === "resources/read") {
-    if (callsFile) appendFileSync(callsFile, JSON.stringify({ method: msg.method, params: msg.params }) + "\n");
+    if (callsFile) appendFileSync(callsFile, JSON.stringify(envelope({ method: msg.method, params: msg.params }, msg)) + "\n");
     const uri = typeof msg.params?.uri === "string" ? msg.params.uri : "file://doc";
     if (typeof msg.params?.blob === "string") {
       send({ jsonrpc: "2.0", id: msg.id, result: { contents: [{ uri, mimeType: "text/plain", blob: msg.params.blob }] } });
@@ -176,7 +185,7 @@ function handle(msg) {
       result: { completion: { values, hasMore: false } },
     });
   } else if (msg.method === "tools/call") {
-    if (callsFile) appendFileSync(callsFile, JSON.stringify(msg.params) + "\n");
+    if (callsFile) appendFileSync(callsFile, JSON.stringify(envelope(msg.params, msg)) + "\n");
     if (typeof msg.params?.arguments?.fail === "string") {
       const error = { code: -32000, message: msg.params.arguments.fail };
       if (msg.params.arguments.failData && typeof msg.params.arguments.failData === "object") {
