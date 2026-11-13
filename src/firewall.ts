@@ -318,7 +318,7 @@ export class Firewall {
   // ---------------------------------------------------------------- client → server
 
   onClientMessage(msg: unknown, scope = ""): ClientDecision {
-    if (!isObject(msg)) return { forward: true };
+    if (!isObject(msg)) return this.foldBareClient(msg);
     if (typeof msg.method !== "string") {
       if ("id" in msg) {
         const id = requestId(msg.id);
@@ -515,6 +515,15 @@ export class Firewall {
       this.unknownClientRequestsAwaitingReply.set(idKey(scope, msg.id), visibleLabel(msg.method));
     }
     return decision;
+  }
+
+  /** A value that is not a JSON-RPC object is still part of what the client sent. A credential path there still reaches the server otherwise. */
+  private foldBareClient(value: unknown): ClientDecision {
+    const denied = this.policyDecision({}, "value", "other", value, "value");
+    if (denied) return denied;
+    const flowed = this.flowDecision({}, "value", "other", value);
+    if (flowed) return flowed;
+    return { forward: true };
   }
 
   /**
