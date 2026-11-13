@@ -38,6 +38,11 @@ function idKey(scope: string, id: unknown): string {
   return scope + "|" + JSON.stringify(id);
 }
 
+/** JSON-RPC keeps the id's type. The number 1 and the string "1" are different requests, so an answer to one must not consume the other. */
+function requestId(id: unknown): string {
+  return JSON.stringify(id);
+}
+
 function minutes(ms: number): string {
   const m = Math.max(1, Math.round(ms / 60000));
   return m === 1 ? "1 minute" : `${m} minutes`;
@@ -286,7 +291,7 @@ export class Firewall {
   private readonly elicitationIdsAwaitingAnswer = new Set<string>();
   private readonly samplingIdsAwaitingAnswer = new Set<string>();
   private readonly rootsIdsAwaitingAnswer = new Set<string>();
-  /** Method of a server request this firewall does not recognize, keyed by its id. */
+  /** Method of a server request this firewall does not recognize, keyed by the JSON form of its id. */
   private readonly unknownRequestsAwaitingAnswer = new Map<string, string>();
   /** Method of a client request this firewall does not recognize, keyed by its id. */
   private readonly unknownClientRequestsAwaitingReply = new Map<string, string>();
@@ -316,7 +321,7 @@ export class Firewall {
     if (!isObject(msg)) return { forward: true };
     if (typeof msg.method !== "string") {
       if ("id" in msg) {
-        const id = String(msg.id);
+        const id = requestId(msg.id);
         const rootAnswer = this.rootsIdsAwaitingAnswer.has(id) && "result" in msg;
         const elicitAnswer = this.elicitationIdsAwaitingAnswer.has(id);
         const samplingAnswer = this.samplingIdsAwaitingAnswer.has(id);
@@ -838,11 +843,11 @@ export class Firewall {
 
   private routeServerMessage(msg: Json, scope: string): Json | null {
     if (msg.method === "sampling/createMessage" && "id" in msg) {
-      this.samplingIdsAwaitingAnswer.add(String(msg.id));
+      this.samplingIdsAwaitingAnswer.add(requestId(msg.id));
       return this.checkSampling(msg);
     }
     if (msg.method === "elicitation/create" && "id" in msg) {
-      this.elicitationIdsAwaitingAnswer.add(String(msg.id));
+      this.elicitationIdsAwaitingAnswer.add(requestId(msg.id));
       return this.checkElicit(msg);
     }
     if (msg.method === "notifications/message") return this.checkLog(msg);
@@ -850,11 +855,11 @@ export class Firewall {
     if (msg.method === "notifications/resources/updated") return this.checkUpdate(msg);
     if (msg.method === "notifications/progress") return this.checkProgress(msg);
     if (msg.method === "roots/list" && "id" in msg) {
-      this.rootsIdsAwaitingAnswer.add(String(msg.id));
+      this.rootsIdsAwaitingAnswer.add(requestId(msg.id));
       return this.checkNotice(msg);
     }
     if (typeof msg.method === "string") {
-      if ("id" in msg) this.unknownRequestsAwaitingAnswer.set(String(msg.id), msg.method);
+      if ("id" in msg) this.unknownRequestsAwaitingAnswer.set(requestId(msg.id), msg.method);
       return this.checkNotice(msg);
     }
     if ("method" in msg || !("id" in msg)) return null;

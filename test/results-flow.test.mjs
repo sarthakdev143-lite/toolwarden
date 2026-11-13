@@ -2607,6 +2607,49 @@ test("a credential path beside an answer never reaches the server", async () => 
   assert.match(JSON.stringify(box.serverCalls()), /id_rsa/);
 });
 
+test("a credential path in a second answer is denied when its id only looks like the first", async () => {
+  const box = sandbox([ECHO]);
+  const ssh = "file:///home/me/.ssh/id_rsa";
+  const prompt = { messages: [{ role: "user", content: { type: "text", text: "Name yourself." } }] };
+  const s = session(box);
+  try {
+    await s.listTools();
+    const numericWait = s.wait(1);
+    await s.request("test/sampling", { requestId: 1, ...prompt });
+    const numeric = await numericWait;
+    assert.equal(numeric.method, "sampling/createMessage");
+    assert.equal(numeric.id, 1);
+
+    const textualWait = s.wait("1");
+    await s.request("test/sampling", { requestId: "1", ...prompt });
+    const textual = await textualWait;
+    assert.equal(textual.id, "1");
+
+    s.send({
+      jsonrpc: "2.0",
+      id: 1,
+      result: { role: "assistant", content: { type: "text", text: "Ada" }, model: "test" },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.match(JSON.stringify(box.serverCalls()), /Ada/);
+
+    const denied = s.wait("1");
+    s.send({
+      jsonrpc: "2.0",
+      id: "1",
+      result: { role: "assistant", content: { type: "text", text: ssh }, model: "test" },
+    });
+    const reply = await denied;
+    assert.equal(reply.error.code, -32000);
+    assert.match(reply.error.message, /Blocked by toolwarden policy/);
+    assert.doesNotMatch(JSON.stringify(reply), /id_rsa/);
+  } finally {
+    await s.close();
+  }
+  assert.doesNotMatch(JSON.stringify(box.serverCalls()), /id_rsa|\.ssh/);
+  assert.match(s.stderr(), /DENIED request "sampling"/);
+});
+
 test("a credential path in an answer to the server never reaches it", async () => {
   const box = sandbox([ECHO]);
   const question = { message: "What should I call you?" };
