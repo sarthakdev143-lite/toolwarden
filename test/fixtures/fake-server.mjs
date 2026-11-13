@@ -93,10 +93,15 @@ function handle(msg) {
   } else if (msg.method === "completion/complete") {
     if (callsFile) appendFileSync(callsFile, JSON.stringify({ method: msg.method, params: msg.params }) + "\n");
     const value = typeof msg.params?.argument?.value === "string" ? msg.params.argument.value : "";
+    const values = Array.isArray(msg.params?.suggestions)
+      ? msg.params.suggestions
+      : value === ""
+        ? []
+        : [value + "-done"];
     send({
       jsonrpc: "2.0",
       id: msg.id,
-      result: { completion: { values: value === "" ? [] : [value + "-done"], hasMore: false } },
+      result: { completion: { values, hasMore: false } },
     });
   } else if (msg.method === "tools/call") {
     if (callsFile) appendFileSync(callsFile, JSON.stringify(msg.params) + "\n");
