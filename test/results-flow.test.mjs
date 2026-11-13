@@ -1368,6 +1368,90 @@ test("flow: a credential in a filesystem root is reported when another server is
   assert.equal(JSON.stringify(box.audit()).includes(FAKE_TOKEN), false);
 });
 
+test("a credential path beside a client message never reaches the server", async () => {
+  const box = sandbox([ECHO]);
+  const ssh = "file:///home/me/.ssh/id_rsa";
+  const encoded = "file:///home/me/%2essh/%69d_rsa";
+  const s = session(box);
+  let before = 0;
+  try {
+    await s.listTools();
+    before = box.serverCalls().length;
+
+    const call = s.wait(50);
+    s.send({
+      jsonrpc: "2.0",
+      id: 50,
+      method: "tools/call",
+      params: { name: "echo", arguments: { echo: "hi" } },
+      note: ssh,
+    });
+    const denied = await call;
+    assert.equal(denied.error.code, -32000);
+    assert.match(denied.error.message, /Blocked by toolwarden policy/);
+    assert.doesNotMatch(JSON.stringify(denied), /id_rsa/);
+
+    const read = s.wait(51);
+    s.send({
+      jsonrpc: "2.0",
+      id: 51,
+      method: "resources/read",
+      params: { uri: "file://notes" },
+      note: encoded,
+    });
+    const readDenied = await read;
+    assert.equal(readDenied.error.code, -32000);
+    assert.match(readDenied.error.message, /Blocked by toolwarden policy/);
+    assert.doesNotMatch(JSON.stringify(readDenied), /%2essh/);
+
+    s.send({
+      jsonrpc: "2.0",
+      method: "tools/call",
+      params: { name: "echo", arguments: { echo: "hi" } },
+      note: ssh,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const ok = s.wait(52);
+    s.send({
+      jsonrpc: "2.0",
+      id: 52,
+      method: "tools/call",
+      params: { name: "echo", arguments: { echo: "hi" } },
+      note: "hello",
+    });
+    const kept = await ok;
+    assert.equal(kept.result.isError, false);
+  } finally {
+    await s.close();
+  }
+  assert.equal(box.serverCalls().length, before + 1, "only the clean call reaches the server");
+  assert.doesNotMatch(JSON.stringify(box.serverCalls()), /id_rsa|%2essh|\.ssh/);
+  assert.match(s.stderr(), /DENIED request "tools\/call"/);
+  assert.match(s.stderr(), /DENIED request "resources\/read"/);
+  assert.match(JSON.stringify(box.serverCalls()), /hello/);
+
+  const warning = session(box, ["--mode", "warn"]);
+  try {
+    await warning.listTools();
+    const incoming = warning.wait(53);
+    warning.send({
+      jsonrpc: "2.0",
+      id: 53,
+      method: "tools/call",
+      params: { name: "echo", arguments: { echo: "hi" } },
+      note: ssh,
+    });
+    const kept = await incoming;
+    assert.equal(kept.result.isError, false);
+  } finally {
+    await warning.close();
+  }
+  assert.match(warning.stderr(), /WARNING request "tools\/call"/);
+  assert.match(warning.stderr(), /warn mode, not blocked/);
+  assert.match(JSON.stringify(box.serverCalls()), /id_rsa/);
+});
+
 test("a client message the firewall does not already check never carries a credential path to the server", async () => {
   const box = sandbox([ECHO]);
   const s = session(box);
@@ -1744,6 +1828,37 @@ test("flow: a policy rule can deny a completion that carries data from another s
     await web.close();
   }
   assert.equal(box.serverCalls().length, before, "a denied completion never reaches the server");
+});
+
+test("flow: a credential beside a client message is reported", async () => {
+  const box = sandbox([ECHO, SEND]);
+  const vault = session(box, [], "vault");
+  try {
+    await vault.listTools();
+    await vault.call("echo", { echo: `your token is ${FAKE_TOKEN}` });
+  } finally {
+    await vault.close();
+  }
+
+  const web = session(box, [], "web");
+  try {
+    await web.listTools();
+    const incoming = web.wait(60);
+    web.send({
+      jsonrpc: "2.0",
+      id: 60,
+      method: "tools/call",
+      params: { name: "send", arguments: { body: "hello" } },
+      note: FAKE_TOKEN,
+    });
+    const res = await incoming;
+    assert.equal(res.result.isError, false, "by default a flow is reported, not blocked");
+  } finally {
+    await web.close();
+  }
+  assert.match(web.stderr(), /WARNING request to "tools\/call" on "web" carries a credential that server "vault" returned/);
+  assert.equal(JSON.stringify(box.audit()).includes(FAKE_TOKEN), false);
+  assert.ok(JSON.stringify(box.serverCalls()).includes(FAKE_TOKEN), "by default the message is still delivered");
 });
 
 test("flow: a credential carried outside the arguments object is reported", async () => {
