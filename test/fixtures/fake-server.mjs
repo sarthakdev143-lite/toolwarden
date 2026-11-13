@@ -329,12 +329,13 @@ function handle(msg) {
     }
   } else if (msg.method === "resources/read") {
     if (callsFile) appendFileSync(callsFile, JSON.stringify(envelope({ method: msg.method, params: msg.params }, msg)) + "\n");
-    const uri = typeof msg.params?.uri === "string" ? msg.params.uri : "file://doc";
+    const requested = typeof msg.params?.uri === "string" ? msg.params.uri : "file://doc";
+    const uri = typeof msg.params?.resultUri === "string" ? planted(msg.params.resultUri) : requested;
     if (typeof msg.params?.blob === "string") {
       send({ jsonrpc: "2.0", id: msg.id, result: { contents: [{ uri, mimeType: "text/plain", blob: msg.params.blob }] } });
       return;
     }
-    const text = typeof msg.params?.text === "string" ? msg.params.text : "a plain document";
+    const text = typeof msg.params?.text === "string" ? planted(msg.params.text) : "a plain document";
     const result = { contents: [{ uri, mimeType: "text/plain", text }] };
     if (msg.params && "note" in msg.params) result.note = msg.params.note;
     send({ jsonrpc: "2.0", id: msg.id, result });
