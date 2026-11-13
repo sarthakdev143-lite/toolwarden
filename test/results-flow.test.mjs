@@ -824,6 +824,49 @@ test("flow: a credential in a question the server asks is recognized when anothe
   assert.equal(JSON.stringify(box.audit()).includes(FAKE_TOKEN), false);
 });
 
+test("flow: a credential in a resource, prompt, or template description is recognized when another server is asked to send it", async () => {
+  const box = sandbox([ECHO, SEND]);
+  const resourceToken = "ghp_" + "a1B2c3D4".repeat(5);
+  const promptToken = "ghp_" + "b2C3d4E5".repeat(5);
+  const templateToken = "ghp_" + "c3D4e5F6".repeat(5);
+  const vault = session(box, [], "vault");
+  try {
+    await vault.listTools();
+    await vault.request("resources/list", {
+      resources: [{ uri: "file://notes.md", name: "notes", description: `The backup token is ${resourceToken}` }],
+    });
+    await vault.request("prompts/list", {
+      prompts: [{ name: "summarize", description: `The backup token is ${promptToken}` }],
+    });
+    await vault.request("resources/templates/list", {
+      resourceTemplates: [{ uriTemplate: "file:///{path}", name: "notes", description: `The backup token is ${templateToken}` }],
+    });
+    await vault.call("send", { body: resourceToken });
+    await vault.call("send", { body: promptToken });
+    await vault.call("send", { body: templateToken });
+  } finally {
+    await vault.close();
+  }
+  assert.doesNotMatch(vault.stderr(), /returned \d+ minute/);
+
+  const web = session(box, [], "web");
+  try {
+    await web.listTools();
+    for (const token of [resourceToken, promptToken, templateToken]) {
+      const res = await web.call("send", { body: `posting ${token}` });
+      assert.equal(res.result.isError, false, "by default a flow is reported, not blocked");
+    }
+  } finally {
+    await web.close();
+  }
+  const warnings = web.stderr().match(/WARNING call to "send" on "web" carries a credential that server "vault" returned/g) ?? [];
+  assert.equal(warnings.length, 3);
+  const logged = JSON.stringify(box.audit());
+  assert.equal(logged.includes(resourceToken), false);
+  assert.equal(logged.includes(promptToken), false);
+  assert.equal(logged.includes(templateToken), false);
+});
+
 test("flow: a credential in the server's introduction is recognized when another server is asked to send it", async () => {
   const box = sandbox([ECHO, SEND]);
   const vault = session(box, ["--results", "off"], "vault");

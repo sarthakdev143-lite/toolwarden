@@ -12,7 +12,7 @@ AI app  ⇄  toolwarden  ⇄  MCP server
 - **Quarantines new tools.** A tool that appears after you first approved a server stays hidden until you approve it.
 - **Guards your credentials.** Tool calls, resource reads and prompt arguments that reference SSH keys, cloud credentials, `.env` files, or token files (Docker, the GitHub CLI, GnuPG, Cargo, Vault, database passwords, Terraform, a Kubernetes service account, and rclone) are denied before they reach the server. You can add your own rules.
 - **Inspects what tools, resources and prompts return.** If that text is aimed at the model ("ignore previous instructions", "do not tell the user"), toolwarden puts a notice in front of it telling the model to treat it as data. It can also withhold the output. The same check covers a tool error, structured tool output, a resource (including text stored in a base64 blob, image, or audio field), a prompt or resource-template description, a sampling request the server asks the model to answer, a question the server asks the user, a log message the server sends, a progress update the server sends, and the introduction a server sends when the connection starts.
-- **Follows data between servers.** If a credential returned by one server, including one stored in a base64 blob or in image or audio data, or shown in a log, a progress update, a sampling request, a question the server asks, a tool definition, or the server's introduction, shows up in a call, resource read, prompt argument, answer to another server's question, or the model's reply to another server, you are told. You can write rules such as "nothing from the vault server may go to the web server".
+- **Follows data between servers.** If a credential returned by one server, including one stored in a base64 blob or in image or audio data, or shown in a log, a progress update, a sampling request, a question the server asks, a tool definition, the server's introduction, or a resource, prompt, or template description, shows up in a call, resource read, prompt argument, answer to another server's question, or the model's reply to another server, you are told. You can write rules such as "nothing from the vault server may go to the web server".
 - **Works with local and remote servers.** Local (stdio) servers are wrapped; remote (HTTP) servers go through a local proxy.
 - **Sets itself up.** `toolwarden init` finds the MCP servers configured on your machine and protects them in one step, with a backup and an undo.
 - **Shows you everything.** A local dashboard for reviewing changes and reading the audit log.
@@ -188,7 +188,7 @@ Put a `policy.json` in `~/.toolwarden/`:
 - `tool` is a glob over the tool name (default `*`).
 - `action` is `deny` (default) or `warn`.
 
-**Flow rules** (`flows`): what to do when a value that one server returned, or showed in a tool definition or its introduction, appears in a call to another server. The first matching rule wins.
+**Flow rules** (`flows`): what to do when a value that one server returned, or showed in a tool definition, its introduction, or a resource, prompt, or template description, appears in a call to another server. The first matching rule wins.
 
 - `from` and `to` are globs over server names.
 - `kind` is `secret` (only credential-shaped values, such as API tokens and private keys) or `any` (default).
@@ -200,7 +200,7 @@ With no flow rules, a credential moving between servers is reported and other va
 
 - **Pins** live in `~/.toolwarden/pins/<server>.json`: a SHA-256 hash of each tool definition, with keys sorted so reordering does not count as a change. The first listing may span pages. toolwarden keeps trusting that listing only while each request continues the cursor the server just returned, and for at most 32 pages. A different listing, or a page past that bound, is reviewed like any later change. A call to a tool that was never listed is blocked.
 - **The audit log** is `~/.toolwarden/audit.log`, one JSON object per line. Credential-shaped values in call arguments are removed before they are written, including a value hidden by one layer of percent-encoding or base64.
-- **Flow tracking** stores only hashes of the values a server returned or showed in a tool definition or its introduction, for 30 minutes, in `~/.toolwarden/flow/`.
+- **Flow tracking** stores only hashes of the values a server returned or showed in a tool definition, its introduction, or a resource, prompt, or template description, for 30 minutes, in `~/.toolwarden/flow/`.
 - Files are created readable only by you.
 
 ## What it does not do
