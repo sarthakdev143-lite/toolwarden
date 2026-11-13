@@ -290,6 +290,8 @@ export class Firewall {
   private readonly unknownRequestsAwaitingAnswer = new Map<string, string>();
   /** Method of a client request this firewall does not recognize, keyed by its id. */
   private readonly unknownClientRequestsAwaitingReply = new Map<string, string>();
+  /** Resource named by a subscription request, keyed by that request's id. */
+  private readonly subscriptionsAwaitingReply = new Map<string, string>();
   private readonly listedThisCycle = new Set<string>();
   private readonly alerted = new Set<string>();
   private readonly resultMode: ResultMode;
@@ -424,6 +426,7 @@ export class Firewall {
       if (denied) return denied;
       const flowed = this.flowDecision(msg, visibleLabel(uri), "subscribe", params);
       if (flowed) return flowed;
+      if ("id" in msg) this.subscriptionsAwaitingReply.set(idKey(scope, msg.id), visibleLabel(uri));
       return { forward: true };
     }
 
@@ -786,6 +789,13 @@ export class Firewall {
       this.unknownClientRequestsAwaitingReply.delete(key);
       if (isObject(msg.result)) return this.checkOtherReply(msg, msg.result, asked, "result");
       if (isObject(msg.error)) return this.checkOtherReply(msg, msg.error, asked, "error");
+    }
+
+    const subscription = this.subscriptionsAwaitingReply.get(key);
+    if (subscription !== undefined) {
+      this.subscriptionsAwaitingReply.delete(key);
+      if (isObject(msg.result)) return this.checkOtherReply(msg, msg.result, subscription, "result");
+      if (isObject(msg.error)) return this.checkOtherReply(msg, msg.error, subscription, "error");
     }
     return null;
   }
