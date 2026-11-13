@@ -1639,7 +1639,7 @@ export class Firewall {
     return { ...base, result: nextResult };
   }
 
-  /** A list item, a definition reply, a field beside a list, a sampling system prompt, a sampling message, the method on a server message, the protocol version, a value that is not a JSON-RPC object, the id of a server message, a field beside a server message, parameters that are not an object, a result or an error on a server request or notification, a progress token, an elicitation question, a resource update, any other server notice, or a cancellation id is still part of what the model reads. A credential path there is still shown otherwise. */
+  /** A list item, a definition reply, a field beside a list, a sampling system prompt, a sampling message, any other field on a sampling request, the method on a server message, the protocol version, a value that is not a JSON-RPC object, the id of a server message, a field beside a server message, parameters that are not an object, a result or an error on a server request or notification, a progress token, an elicitation question, a resource update, any other server notice, or a cancellation id is still part of what the model reads. A credential path there is still shown otherwise. */
   private warnLooseDefinition(item: unknown, label: string): void {
     const shown = scanResult(item);
     const findings = scanTool(item).filter((finding) => !shown.some((have) => have.id === finding.id));
@@ -1999,12 +1999,18 @@ export class Firewall {
     return { ...msg, params: withhold ? withholdElicit(text) : annotateElicit(params, text) };
   }
 
-  /** The system prompt is instructions the model follows. A credential path there is still shown otherwise. A sampling message is what the model is asked to answer. A credential path there is still shown otherwise. */
+  /** The system prompt is instructions the model follows. A credential path there is still shown otherwise. A sampling message is what the model is asked to answer. A credential path there is still shown otherwise. Any other field on that request is still part of it. A credential path there is still shown otherwise. */
   private checkSampling(msg: Json): Json | null {
     const params = isObject(msg.params) ? msg.params : {};
     this.opts.flow?.record(params);
     if ("systemPrompt" in params) this.warnLooseDefinition(params.systemPrompt, "sampling prompt");
     if ("messages" in params) this.warnLooseDefinition(params.messages, "sampling message");
+    const rest: Json = {};
+    for (const [key, value] of Object.entries(params)) {
+      if (key === "systemPrompt" || key === "messages") continue;
+      rest[key] = value;
+    }
+    if (Object.keys(rest).length > 0) this.warnLooseDefinition(rest, "sampling field");
     if (this.resultMode === "off") return null;
     const findings = scanResult(params);
     if (findings.length === 0) return null;

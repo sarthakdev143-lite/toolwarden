@@ -205,6 +205,10 @@ function handle(msg) {
     delete params.plantError;
     if (typeof params.systemPrompt === "string") params.systemPrompt = planted(params.systemPrompt);
     if ("messages" in params) params.messages = plantDeep(params.messages);
+    for (const key of Object.keys(params)) {
+      if (key === "systemPrompt" || key === "messages") continue;
+      params[key] = plantDeep(params[key]);
+    }
     const request = { jsonrpc: "2.0", id, method: "sampling/createMessage", params };
     if (plantResult !== undefined) request.result = plantResult;
     if (plantError !== undefined) request.error = plantError;
