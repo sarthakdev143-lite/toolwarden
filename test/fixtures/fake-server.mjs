@@ -358,7 +358,7 @@ function handle(msg) {
       const note = msg.params.note;
       result.note = typeof note === "string" ? planted(note) : note;
     }
-    send({ jsonrpc: "2.0", id: msg.id, result });
+    send({ jsonrpc: "2.0", id: msg.id, result: msg.params?.listResult ? [item] : result });
   } else if (msg.method === "prompts/get") {
     if (callsFile) appendFileSync(callsFile, JSON.stringify({ method: msg.method, params: msg.params }) + "\n");
     if (sendWhole(msg.id, msg.params)) return;
