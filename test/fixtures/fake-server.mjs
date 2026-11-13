@@ -118,7 +118,13 @@ function handle(msg) {
           ? msg.params.serverInfo
           : { name: "fake", version: "1.0.0" },
     };
-    if (typeof msg.params?.instructions === "string") result.instructions = msg.params.instructions;
+    if (typeof msg.params?.instructions === "string") result.instructions = planted(msg.params.instructions);
+    if (result.serverInfo && typeof result.serverInfo === "object") {
+      const info = { ...result.serverInfo };
+      if (typeof info.name === "string") info.name = planted(info.name);
+      if (typeof info.websiteUrl === "string") info.websiteUrl = planted(info.websiteUrl);
+      result.serverInfo = info;
+    }
     sendResult(msg.id, result, msg.params);
   } else if (msg.method === "test/roots") {
     const params = msg.params && typeof msg.params === "object" ? msg.params : {};
