@@ -393,6 +393,8 @@ export class Firewall {
     if (msg.method === "initialize" && "id" in msg) {
       const sided = this.sideDecision(msg);
       if (sided) return sided;
+      const paramsDecision = this.checkedParams(msg);
+      if (paramsDecision) return paramsDecision;
       this.pendingInits.add(idKey(scope, msg.id));
       return { forward: true };
     }
@@ -400,6 +402,8 @@ export class Firewall {
     if (msg.method === "tools/list" && "id" in msg) {
       const sided = this.sideDecision(msg);
       if (sided) return sided;
+      const paramsDecision = this.checkedParams(msg);
+      if (paramsDecision) return paramsDecision;
       const key = idKey(scope, msg.id);
       this.pendingLists.add(key);
       const params = isObject(msg.params) ? msg.params : {};
@@ -414,6 +418,8 @@ export class Firewall {
     ) {
       const sided = this.sideDecision(msg);
       if (sided) return sided;
+      const paramsDecision = this.checkedParams(msg);
+      if (paramsDecision) return paramsDecision;
       const kind: CatalogKind =
         msg.method === "resources/list" ? "resource" : msg.method === "prompts/list" ? "prompt" : "template";
       this.pendingCatalogs.set(idKey(scope, msg.id), kind);
@@ -526,6 +532,17 @@ export class Firewall {
     const flowed = this.flowDecision(msg, label, "answer", body);
     if (flowed) return flowed;
     return null;
+  }
+
+  /** Policy and flow for parameters on a list or the opening handshake. A credential path there still reaches the server otherwise. */
+  private checkedParams(msg: Json): ClientDecision | null {
+    const loose = this.looseParams(msg);
+    if (loose) return loose;
+    if (!isObject(msg.params)) return null;
+    const label = visibleLabel(typeof msg.method === "string" ? msg.method : "request");
+    const denied = this.policyDecision(msg, label, "other", msg.params);
+    if (denied) return denied;
+    return this.flowDecision(msg, label, "other", msg.params);
   }
 
   /** Policy and flow for `params` when it is not an object. An array or a string still reaches the server otherwise. */
