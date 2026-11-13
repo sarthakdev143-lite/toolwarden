@@ -390,6 +390,73 @@ test("the proxy passes other traffic through untouched and exits with the server
   assert.equal(code, 0);
 });
 
+test("a multibyte character split across reads reaches the server and comes back intact", async () => {
+  const box = sandbox([]);
+  const server = join(box.dir, "bytes.mjs");
+  const seen = join(box.dir, "seen.log");
+  writeFileSync(
+    server,
+    `import { appendFileSync } from "node:fs";
+let buf = Buffer.alloc(0);
+process.stdin.on("data", (chunk) => {
+  buf = Buffer.concat([buf, chunk]);
+  for (;;) {
+    const nl = buf.indexOf(0x0a);
+    if (nl === -1) break;
+    const line = Buffer.from(buf.subarray(0, nl));
+    buf = Buffer.from(buf.subarray(nl + 1));
+    appendFileSync(process.env.SEEN, Buffer.concat([line, Buffer.from("\\n")]));
+    let msg;
+    try {
+      msg = JSON.parse(line.toString("utf8"));
+    } catch {
+      continue;
+    }
+    const reply = Buffer.from(JSON.stringify({ jsonrpc: "2.0", id: msg.id, result: { text: "naïve" } }) + "\\n");
+    const cut = reply.indexOf(0xc3) + 1;
+    process.stdout.write(reply.subarray(0, cut));
+    setTimeout(() => process.stdout.write(reply.subarray(cut)), 40);
+  }
+});
+process.stdin.on("end", () => setTimeout(() => process.exit(0), 80));
+`,
+  );
+
+  const child = spawn("node", [CLI, "run", "--name", "bytes", "--state", box.state, "--", "node", server], {
+    stdio: ["pipe", "pipe", "pipe"],
+    env: { ...process.env, SEEN: seen },
+  });
+  child.stderr.on("data", () => {});
+  const stdout = [];
+  child.stdout.on("data", (c) => stdout.push(c));
+
+  const exited = new Promise((resolve) => child.on("exit", resolve));
+  try {
+    const request = Buffer.from(JSON.stringify({ jsonrpc: "2.0", id: 1, method: "ping", params: { q: "café" } }) + "\n");
+    const cut = request.indexOf(0xc3) + 1;
+    child.stdin.write(request.subarray(0, cut));
+    await new Promise((r) => setTimeout(r, 50));
+    child.stdin.write(request.subarray(cut));
+
+    const expected = JSON.stringify({ jsonrpc: "2.0", id: 1, result: { text: "naïve" } }) + "\n";
+    const deadline = Date.now() + 3000;
+    while (Date.now() < deadline && !Buffer.concat(stdout).includes(0x0a)) {
+      await new Promise((r) => setTimeout(r, 20));
+    }
+
+    const recorded = existsSync(seen) ? readFileSync(seen, "utf8") : "";
+    assert.equal(recorded, request.toString("utf8"), "the server saw the original request");
+    assert.equal(Buffer.concat(stdout).toString("utf8"), expected, "the client saw the original response");
+    child.stdin.end();
+    assert.equal(await exited, 0);
+  } finally {
+    if (child.exitCode === null) {
+      child.kill("SIGTERM");
+      await exited;
+    }
+  }
+});
+
 test("when the client disconnects abruptly the proxy shuts down without crashing", async () => {
   const box = sandbox([READ_FILE]);
   const child = spawn("node", [CLI, "run", "--name", "fake", "--state", box.state, "--", "node", FAKE], {

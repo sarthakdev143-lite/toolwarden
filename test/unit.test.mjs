@@ -72,6 +72,26 @@ test("warn rules do not deny", () => {
   assert.deepEqual(v.warnings.map((w) => w.ruleId), ["curl"]);
 });
 
+test("stdio framing keeps a character whose bytes arrive in different chunks", async () => {
+  const { LineSplitter } = await import("../dist/proxy.js");
+  const got = [];
+  const splitter = new LineSplitter((line) => got.push(line));
+  const cafe = Buffer.from('{"q":"café"}\n');
+  splitter.push(cafe.subarray(0, cafe.indexOf(0xc3) + 1));
+  splitter.push(cafe.subarray(cafe.indexOf(0xc3) + 1));
+  const euro = Buffer.from('{"q":"€"}\r\n');
+  splitter.push(euro.subarray(0, euro.indexOf(0xe2) + 1));
+  splitter.push(euro.subarray(euro.indexOf(0xe2) + 1, euro.indexOf(0xe2) + 2));
+  splitter.push(euro.subarray(euro.indexOf(0xe2) + 2));
+  const emoji = Buffer.from('{"q":"🙂"}\n');
+  const mark = emoji.indexOf(0xf0);
+  splitter.push(emoji.subarray(0, mark + 2));
+  splitter.push(emoji.subarray(mark + 2));
+  splitter.push(Buffer.from('{"a":1}\n{"b":'));
+  splitter.push(Buffer.from("2}\n"));
+  assert.deepEqual(got, ['{"q":"café"}', '{"q":"€"}', '{"q":"🙂"}', '{"a":1}', '{"b":2}']);
+});
+
 test("Windows shell quoting keeps arguments literal", async () => {
   const { quoteForWindowsShell: q } = await import("../dist/proxy.js");
   assert.equal(q("npx"), "npx");

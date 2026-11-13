@@ -1,14 +1,16 @@
 import { spawn } from "node:child_process";
+import { StringDecoder } from "node:string_decoder";
 import type { Firewall } from "./firewall.js";
 
 /** Splits a byte stream into newline-delimited lines (MCP's stdio framing). */
-class LineSplitter {
+export class LineSplitter {
+  private readonly decoder = new StringDecoder("utf8");
   private buffer = "";
 
   constructor(private readonly onLine: (line: string) => void) {}
 
   push(chunk: Buffer | string): void {
-    this.buffer += typeof chunk === "string" ? chunk : chunk.toString("utf8");
+    this.buffer += typeof chunk === "string" ? chunk : this.decoder.write(chunk);
     let idx: number;
     while ((idx = this.buffer.indexOf("\n")) !== -1) {
       const line = this.buffer.slice(0, idx).replace(/\r$/, "");
@@ -18,6 +20,7 @@ class LineSplitter {
   }
 
   flush(): void {
+    this.buffer += this.decoder.end();
     const rest = this.buffer.trim();
     this.buffer = "";
     if (rest.length > 0) this.onLine(rest);
