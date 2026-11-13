@@ -944,6 +944,65 @@ async function rootsReply(box, count = 1) {
   throw new Error("roots reply did not reach the server");
 }
 
+test("flow: a credential in a filesystem root is reported when another server is told about it", async () => {
+  const box = sandbox([ECHO]);
+  const project = { uri: "file:///home/me/project", name: "Project" };
+  const leaked = { uri: `file:///tmp/${FAKE_TOKEN}`, name: "notes" };
+  const vault = session(box, [], "vault");
+  try {
+    await vault.listTools();
+    await vault.call("echo", { echo: `your token is ${FAKE_TOKEN}` });
+    const incoming = vault.wait(9003);
+    await vault.request("test/roots", {});
+    const ask = await incoming;
+    vault.send({ jsonrpc: "2.0", id: ask.id, result: { roots: [leaked] } });
+    const same = await rootsReply(box);
+    assert.deepEqual(same.result.roots, [leaked]);
+  } finally {
+    await vault.close();
+  }
+  assert.doesNotMatch(vault.stderr(), /returned \d+ minute/);
+
+  const web = session(box, [], "web");
+  try {
+    await web.listTools();
+    const incoming = web.wait(9003);
+    await web.request("test/roots", {});
+    const ask = await incoming;
+    web.send({ jsonrpc: "2.0", id: ask.id, result: { roots: [leaked, project] } });
+    const delivered = await rootsReply(box, 2);
+    assert.deepEqual(delivered.result.roots, [leaked, project], "by default a flow is reported, not blocked");
+  } finally {
+    await web.close();
+  }
+  assert.match(
+    web.stderr(),
+    /WARNING root ".*" on "web" carries a credential that server "vault" returned/,
+  );
+  assert.equal(JSON.stringify(box.audit()).includes(FAKE_TOKEN), false);
+
+  const policyFile = join(box.dir, "policy.json");
+  writeFileSync(
+    policyFile,
+    JSON.stringify({ flows: [{ id: "vault-stays-put", from: "vault", to: "*", action: "deny" }] }),
+  );
+  const gated = session(box, ["--policy", policyFile], "web");
+  try {
+    await gated.listTools();
+    const incoming = gated.wait(9003);
+    await gated.request("test/roots", {});
+    const ask = await incoming;
+    gated.send({ jsonrpc: "2.0", id: ask.id, result: { roots: [leaked, project] } });
+    const filtered = await rootsReply(box, 3);
+    assert.deepEqual(filtered.result.roots, [project]);
+    assert.doesNotMatch(JSON.stringify(filtered), new RegExp(FAKE_TOKEN));
+  } finally {
+    await gated.close();
+  }
+  assert.match(gated.stderr(), /DENIED root/);
+  assert.equal(JSON.stringify(box.audit()).includes(FAKE_TOKEN), false);
+});
+
 test("a resource subscription that names credentials never reaches the server", async () => {
   const box = sandbox([ECHO]);
   const s = session(box);
