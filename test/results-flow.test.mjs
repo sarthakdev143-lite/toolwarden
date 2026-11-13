@@ -2613,19 +2613,25 @@ test("a credential path beside an answer never reaches the server", async () => 
     ];
     for (const [kind, body, label] of cases) {
       const incoming = await asked(s, kind);
+      const logged = box.audit().filter((entry) => entry.event === "call_denied" && entry.tool === label).length;
       const denied = s.wait(incoming.id);
       s.send({ jsonrpc: "2.0", id: incoming.id, ...body });
       const reply = await denied;
       assert.equal(reply.error.code, -32000);
       assert.match(reply.error.message, /Blocked by toolwarden policy/);
       assert.doesNotMatch(JSON.stringify(reply), /id_rsa|%2essh/);
-      assert.match(s.stderr(), new RegExp(`DENIED request "${label}"`));
+      const denials = box.audit().filter((entry) => entry.event === "call_denied" && entry.tool === label).length;
+      assert.ok(denials > logged, `expected a denial for ${label}`);
     }
     assert.equal(box.serverCalls().length, before, "a denied answer never reaches the server");
     assert.doesNotMatch(JSON.stringify(box.serverCalls()), /id_rsa|%2essh|\.ssh/);
   } finally {
     await s.close();
   }
+  assert.match(s.stderr(), /DENIED request "elicitation"/);
+  assert.match(s.stderr(), /DENIED request "sampling"/);
+  assert.match(s.stderr(), /DENIED request "custom\/ask"/);
+  assert.match(s.stderr(), /DENIED request "roots"/);
 
   const warning = session(box, ["--mode", "warn"]);
   try {
@@ -2854,19 +2860,23 @@ test("a credential path in an answer to the server never reaches it", async () =
     ];
     for (const [kind, body, label] of cases) {
       const incoming = await asked(s, kind);
+      const logged = box.audit().filter((entry) => entry.event === "call_denied" && entry.tool === label).length;
       const denied = s.wait(incoming.id);
       s.send({ jsonrpc: "2.0", id: incoming.id, ...body });
       const reply = await denied;
       assert.equal(reply.error.code, -32000);
       assert.match(reply.error.message, /Blocked by toolwarden policy/);
       assert.doesNotMatch(JSON.stringify(reply), /id_rsa|%2essh/);
-      assert.match(s.stderr(), new RegExp(`DENIED request "${label}"`));
+      const denials = box.audit().filter((entry) => entry.event === "call_denied" && entry.tool === label).length;
+      assert.ok(denials > logged, `expected a denial for ${label}`);
     }
     assert.equal(box.serverCalls().length, before, "a denied answer never reaches the server");
     assert.doesNotMatch(JSON.stringify(box.serverCalls()), /id_rsa|%2essh|\.ssh/);
   } finally {
     await s.close();
   }
+  assert.match(s.stderr(), /DENIED request "elicitation"/);
+  assert.match(s.stderr(), /DENIED request "sampling"/);
 
   const warning = session(box, ["--mode", "warn"]);
   try {
