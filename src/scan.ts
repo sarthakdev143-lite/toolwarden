@@ -115,7 +115,7 @@ function encodedText(key: string, value: unknown): string | null {
   return decodedBlob(value);
 }
 
-/** Includes text stored in a base64 blob (URL-safe, unpadded, or written with a compatibility or invisible character), in image and audio data, including when that data is a list, and in object keys. */
+/** Includes text stored in a base64 blob (URL-safe, unpadded, or written with a compatibility or invisible character), including when that blob is a list, in image and audio data, including when that data is a list, and in object keys. */
 export function collectText(value: unknown): string[] {
   const out: string[] = [];
   collectStrings(value, out, false);
@@ -137,7 +137,7 @@ function collectStrings(value: unknown, out: string[], decode: boolean): void {
   }
   if (value !== null && typeof value === "object") {
     for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
-      collectStrings(v, out, key === "data" || (key === "blob" && typeof v === "string"));
+      collectStrings(v, out, key === "data" || key === "blob");
       out.push(key);
     }
   }
