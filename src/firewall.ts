@@ -1381,6 +1381,8 @@ export class Firewall {
         const nextCursor = typeof result.nextCursor === "string" && result.nextCursor !== "" ? result.nextCursor : null;
         const kept = this.checkListing(result.tools, requestedCursor, nextCursor);
         if (kept.length !== result.tools.length) listed = { ...base, result: { ...result, tools: kept } };
+      } else if ("tools" in result) {
+        this.warnLooseDefinition(result.tools, "tool");
       }
       return this.foldLooseItems(base, result, "tools", this.foldBesideList(base, result, "tools", listed)) ?? paired;
     }
@@ -1620,14 +1622,40 @@ export class Firewall {
     return { ...base, result: nextResult };
   }
 
+  /** A list item that is not an object is still part of the list the model reads. A credential path there is still shown otherwise. */
+  private warnLooseDefinition(item: unknown, label: string): void {
+    const shown = scanResult(item);
+    const findings = scanTool(item).filter((finding) => !shown.some((have) => have.id === finding.id));
+    if (findings.length === 0) return;
+    const { server, audit } = this.opts;
+    const hash = hashTool(item);
+    for (const f of findings) {
+      const alertKey = "loose-item:" + label + ":" + hash + ":" + f.id;
+      if (this.alerted.has(alertKey)) continue;
+      this.alerted.add(alertKey);
+      audit.alert(`WARNING: the ${label} on "${server}" ${f.message}. Read it before trusting it.`, {
+        event: "definition_warning",
+        tool: label,
+        check: f.id,
+        reason: f.message,
+      });
+    }
+  }
+
   /** A resource, prompt, or template description is a definition the model reads. A credential path there is still shown otherwise. */
   private checkCatalog(result: Json, kind: CatalogKind): void {
     const items = catalogItems(result, kind);
-    if (!Array.isArray(items)) return;
+    if (!Array.isArray(items)) {
+      if (items !== undefined) this.warnLooseDefinition(items, kind);
+      return;
+    }
     this.opts.flow?.record(items);
     const { server, audit } = this.opts;
     for (const item of items) {
-      if (!isObject(item)) continue;
+      if (!isObject(item)) {
+        this.warnLooseDefinition(item, kind);
+        continue;
+      }
       const label = visibleLabel(catalogLabel(item, kind));
       const shown = scanResult(item);
       const findings = [
@@ -2083,6 +2111,7 @@ export class Firewall {
       const name = isObject(tool) ? tool.name : undefined;
       if (typeof name !== "string") {
         if (isObject(tool)) this.looseTool(tool);
+        else this.warnLooseDefinition(tool, "tool");
         kept.push(tool);
         continue;
       }

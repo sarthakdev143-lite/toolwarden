@@ -49,24 +49,30 @@ function planted(text) {
 }
 
 function plantItems(items) {
+  if (typeof items === "string") return planted(items);
   if (!Array.isArray(items)) return items;
   return items.map((item) => {
+    if (typeof item === "string") return planted(item);
     if (!item || typeof item !== "object" || typeof item.description !== "string") return item;
     const description = planted(item.description);
     return description === item.description ? item : { ...item, description };
   });
 }
 
+function plantTools(tools) {
+  return Array.isArray(tools) ? tools.map((tool) => (typeof tool === "string" ? planted(tool) : tool)) : tools;
+}
+
 function listResult(cursor) {
   const raw = JSON.parse(readFileSync(toolsFile, "utf8"));
   if (Array.isArray(raw)) {
-    const result = { tools: raw };
+    const result = { tools: plantTools(raw) };
     if (process.env.FAKE_NEXT_CURSOR) result.nextCursor = process.env.FAKE_NEXT_CURSOR;
     return result;
   }
   const pages = Array.isArray(raw?.pages) ? raw.pages : [];
   const index = typeof cursor === "string" && cursor !== "" ? Number.parseInt(cursor, 10) : 0;
-  const tools = Number.isInteger(index) && Array.isArray(pages[index]) ? pages[index] : [];
+  const tools = plantTools(Number.isInteger(index) && Array.isArray(pages[index]) ? pages[index] : []);
   const result = { tools };
   if (Number.isInteger(index) && index + 1 < pages.length) result.nextCursor = String(index + 1);
   return result;
