@@ -13,7 +13,7 @@ directions.
 
 ## What we protect
 
-1. **The person's credentials and files**: SSH keys, cloud credentials, `.env` files, tokens.
+1. **The person's credentials and files**: SSH keys, cloud credentials, `.env` files, and token files such as Docker, GitHub CLI, GnuPG, Cargo, and Vault.
 2. **The model's instructions**: what the model does should come from the person, not
    from text a server slipped in.
 3. **The person's ability to know what happened**: a record of every tool call.
