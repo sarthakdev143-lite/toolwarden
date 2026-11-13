@@ -1,9 +1,8 @@
 import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { includePercentDecoded } from "./percent.js";
 import { slug } from "./pins.js";
-import { collectText } from "./scan.js";
+import { collectText, matchForms } from "./scan.js";
 
 /**
  * Cross-server data tracking.
@@ -15,7 +14,9 @@ import { collectText } from "./scan.js";
  * other notification, any other server request, a request for filesystem
  * roots, the reply to any other client request, the reply to a resource
  * subscription, or a field beside a server message, or an object key, or returns text, we remember
- * fingerprints (hashes, never the values) of the distinctive tokens in it. When
+ * fingerprints (hashes, never the values) of the distinctive tokens in it. A token
+ * written with a compatibility character or an invisible character is the same
+ * token. When
  * a call to a *different* server carries one of those tokens in its arguments,
  * in a filesystem root, in any other client message, in a field beside the
  * parameters, in the answer to a question, in a sampling reply, or in the
@@ -59,7 +60,7 @@ function fingerprint(token: string): string {
 
 /** Extract fingerprints of secret-shaped strings and of long mixed tokens. */
 export function extractFingerprints(value: unknown): { secrets: string[]; values: string[] } {
-  const text = includePercentDecoded(collectText(value)).join("\n").slice(0, MAX_SCAN_CHARS);
+  const text = collectText(value).flatMap(matchForms).join("\n").slice(0, MAX_SCAN_CHARS);
 
   const secrets = new Set<string>();
   for (const pattern of SECRET_PATTERNS) {
