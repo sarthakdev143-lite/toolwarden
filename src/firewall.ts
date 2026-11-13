@@ -520,11 +520,11 @@ export class Firewall {
     return null;
   }
 
-  /** Policy and flow for a field beside `params` on a method this firewall already handles. */
+  /** Policy and flow for the request id and any field beside `params` on a method this firewall already handles. A credential path in the id still reaches the server otherwise. */
   private sideDecision(msg: Json): ClientDecision | null {
     const body: Json = {};
     for (const [key, value] of Object.entries(msg)) {
-      if (key === "jsonrpc" || key === "id" || key === "method" || key === "params") continue;
+      if (key === "jsonrpc" || key === "method" || key === "params") continue;
       body[key] = value;
     }
     if (Object.keys(body).length === 0) return null;
@@ -536,11 +536,11 @@ export class Firewall {
     return null;
   }
 
-  /** Policy and flow for a client message this firewall does not handle specially. The method name is part of that message: a credential path there still reaches the server otherwise. */
+  /** Policy and flow for a client message this firewall does not handle specially. The method name and the request id are part of that message: a credential path there still reaches the server otherwise. */
   private checkUnhandled(msg: Json): ClientDecision {
     const body: Json = {};
     for (const [key, value] of Object.entries(msg)) {
-      if (key === "jsonrpc" || key === "id") continue;
+      if (key === "jsonrpc") continue;
       body[key] = value;
     }
     const label = visibleLabel(typeof msg.method === "string" ? msg.method : "request");

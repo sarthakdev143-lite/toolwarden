@@ -2613,19 +2613,25 @@ test("a credential path beside an answer never reaches the server", async () => 
     ];
     for (const [kind, body, label] of cases) {
       const incoming = await asked(s, kind);
+      const logged = box.audit().filter((entry) => entry.event === "call_denied" && entry.tool === label).length;
       const denied = s.wait(incoming.id);
       s.send({ jsonrpc: "2.0", id: incoming.id, ...body });
       const reply = await denied;
       assert.equal(reply.error.code, -32000);
       assert.match(reply.error.message, /Blocked by toolwarden policy/);
       assert.doesNotMatch(JSON.stringify(reply), /id_rsa|%2essh/);
-      assert.match(s.stderr(), new RegExp(`DENIED request "${label}"`));
+      const denials = box.audit().filter((entry) => entry.event === "call_denied" && entry.tool === label).length;
+      assert.ok(denials > logged, `expected a denial for ${label}`);
     }
     assert.equal(box.serverCalls().length, before, "a denied answer never reaches the server");
     assert.doesNotMatch(JSON.stringify(box.serverCalls()), /id_rsa|%2essh|\.ssh/);
   } finally {
     await s.close();
   }
+  assert.match(s.stderr(), /DENIED request "elicitation"/);
+  assert.match(s.stderr(), /DENIED request "sampling"/);
+  assert.match(s.stderr(), /DENIED request "custom\/ask"/);
+  assert.match(s.stderr(), /DENIED request "roots"/);
 
   const warning = session(box, ["--mode", "warn"]);
   try {
@@ -2756,6 +2762,70 @@ test("a credential path in a response that is not the outstanding answer never r
   assert.match(JSON.stringify(box.serverCalls()), /id_rsa/);
 });
 
+test("a credential path in a request id never reaches the server", async () => {
+  const box = sandbox([ECHO]);
+  const ssh = "file:///home/me/.ssh/id_rsa";
+  const encoded = "file:///home/me/%2essh/%69d_rsa";
+  const s = session(box);
+  try {
+    await s.listTools();
+    const hidden = s.wait(ssh);
+    s.send({
+      jsonrpc: "2.0",
+      id: ssh,
+      method: "tools/call",
+      params: { name: "echo", arguments: { echo: "marker-id-path" } },
+    });
+    const blocked = await hidden;
+    assert.equal(blocked.error.code, -32000);
+    assert.match(blocked.error.message, /Blocked by toolwarden policy/);
+
+    const broken = s.wait("note\n" + ssh);
+    s.send({
+      jsonrpc: "2.0",
+      id: "note\n" + ssh,
+      method: "tools/call",
+      params: { name: "echo", arguments: { echo: "marker-id-line" } },
+    });
+    const lined = await broken;
+    assert.equal(lined.error.code, -32000);
+
+    const foreign = s.wait(encoded);
+    s.send({ jsonrpc: "2.0", id: encoded, method: "ping", params: { note: "hello" } });
+    const ping = await foreign;
+    assert.equal(ping.error.code, -32000);
+    assert.match(ping.error.message, /Blocked by toolwarden policy/);
+
+    const ok = await s.call("echo", { echo: "marker-ok" });
+    assert.equal(ok.result.content[0].text, "marker-ok");
+  } finally {
+    await s.close();
+  }
+  const calls = JSON.stringify(box.serverCalls());
+  assert.doesNotMatch(calls, /marker-id-path|marker-id-line|id_rsa|%2essh|\.ssh/);
+  assert.match(calls, /marker-ok/);
+  assert.match(s.stderr(), /DENIED request "tools\/call"/);
+  assert.match(s.stderr(), /DENIED request "ping"/);
+
+  const warning = session(box, ["--mode", "warn"]);
+  try {
+    await warning.listTools();
+    const kept = warning.wait(ssh);
+    warning.send({
+      jsonrpc: "2.0",
+      id: ssh,
+      method: "tools/call",
+      params: { name: "echo", arguments: { echo: "marker-id-warn" } },
+    });
+    const delivered = await kept;
+    assert.equal(delivered.result.content.at(-1).text, "marker-id-warn");
+  } finally {
+    await warning.close();
+  }
+  assert.match(warning.stderr(), /warn mode, not blocked/);
+  assert.match(JSON.stringify(box.serverCalls()), /marker-id-warn/);
+});
+
 test("a credential path in an answer to the server never reaches it", async () => {
   const box = sandbox([ECHO]);
   const question = { message: "What should I call you?" };
@@ -2790,19 +2860,23 @@ test("a credential path in an answer to the server never reaches it", async () =
     ];
     for (const [kind, body, label] of cases) {
       const incoming = await asked(s, kind);
+      const logged = box.audit().filter((entry) => entry.event === "call_denied" && entry.tool === label).length;
       const denied = s.wait(incoming.id);
       s.send({ jsonrpc: "2.0", id: incoming.id, ...body });
       const reply = await denied;
       assert.equal(reply.error.code, -32000);
       assert.match(reply.error.message, /Blocked by toolwarden policy/);
       assert.doesNotMatch(JSON.stringify(reply), /id_rsa|%2essh/);
-      assert.match(s.stderr(), new RegExp(`DENIED request "${label}"`));
+      const denials = box.audit().filter((entry) => entry.event === "call_denied" && entry.tool === label).length;
+      assert.ok(denials > logged, `expected a denial for ${label}`);
     }
     assert.equal(box.serverCalls().length, before, "a denied answer never reaches the server");
     assert.doesNotMatch(JSON.stringify(box.serverCalls()), /id_rsa|%2essh|\.ssh/);
   } finally {
     await s.close();
   }
+  assert.match(s.stderr(), /DENIED request "elicitation"/);
+  assert.match(s.stderr(), /DENIED request "sampling"/);
 
   const warning = session(box, ["--mode", "warn"]);
   try {
