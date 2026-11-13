@@ -198,6 +198,8 @@ export interface ClientDecision {
   forward: boolean;
   /** Send this message back to the client instead (used when a call is blocked). */
   reply?: Json;
+  /** Send this message to the server instead of the original. */
+  send?: Json;
 }
 
 /**
@@ -220,6 +222,7 @@ export class Firewall {
   private readonly pendingCompletions = new Map<string, string>();
   private readonly elicitationIdsAwaitingAnswer = new Set<string>();
   private readonly samplingIdsAwaitingAnswer = new Set<string>();
+  private readonly rootsIdsAwaitingAnswer = new Set<string>();
   private readonly listedThisCycle = new Set<string>();
   private readonly alerted = new Set<string>();
   private readonly resultMode: ResultMode;
@@ -243,17 +246,23 @@ export class Firewall {
   onClientMessage(msg: unknown, scope = ""): ClientDecision {
     if (!isObject(msg)) return { forward: true };
     if (typeof msg.method !== "string") {
-      if ("id" in msg && "result" in msg) {
+      if ("id" in msg) {
         const id = String(msg.id);
-        if (this.elicitationIdsAwaitingAnswer.delete(id)) {
-          const result = isObject(msg.result) ? msg.result : {};
-          const args = "content" in result ? result.content : result;
-          const flowed = this.flowDecision(msg, "elicitation", "answer", args);
-          if (flowed) return flowed;
+        if (this.rootsIdsAwaitingAnswer.delete(id) && "result" in msg) {
+          const rewritten = this.rewriteRoots(msg);
+          if (rewritten) return { forward: true, send: rewritten };
         }
-        if (this.samplingIdsAwaitingAnswer.delete(id)) {
-          const flowed = this.flowDecision(msg, "sampling", "answer", msg.result);
-          if (flowed) return flowed;
+        if ("result" in msg) {
+          if (this.elicitationIdsAwaitingAnswer.delete(id)) {
+            const result = isObject(msg.result) ? msg.result : {};
+            const args = "content" in result ? result.content : result;
+            const flowed = this.flowDecision(msg, "elicitation", "answer", args);
+            if (flowed) return flowed;
+          }
+          if (this.samplingIdsAwaitingAnswer.delete(id)) {
+            const flowed = this.flowDecision(msg, "sampling", "answer", msg.result);
+            if (flowed) return flowed;
+          }
         }
       }
       return { forward: true };
@@ -525,6 +534,49 @@ export class Firewall {
     };
   }
 
+  /** A roots reply with credential paths has those roots removed before the server sees it. An ordinary list is left unchanged. */
+  private rewriteRoots(msg: Json): Json | null {
+    const result = isObject(msg.result) ? msg.result : null;
+    if (!result || !Array.isArray(result.roots)) return null;
+    const { server, audit } = this.opts;
+    const blocking = this.opts.mode === "block";
+    const kept: unknown[] = [];
+    let changed = false;
+    for (const root of result.roots) {
+      const uri = isObject(root) && typeof root.uri === "string" ? root.uri : "root";
+      const label = visibleLabel(uri);
+      const verdict = this.opts.policy.evaluate("roots/list", root);
+      for (const w of verdict.warnings) {
+        audit.alert(`WARNING root "${label}" on "${server}" ${w.message} (rule ${w.ruleId}).`, {
+          event: "call_warning",
+          tool: label,
+          rule: w.ruleId,
+          reason: w.message,
+        });
+      }
+      if (verdict.denied && blocking) {
+        audit.alert(`DENIED root "${label}" on "${server}": it ${verdict.denied.message} (rule ${verdict.denied.ruleId}).`, {
+          event: "call_denied",
+          tool: label,
+          rule: verdict.denied.ruleId,
+          reason: verdict.denied.message,
+          args: summarizeArgs(root),
+        });
+        changed = true;
+        continue;
+      }
+      if (verdict.denied) {
+        audit.alert(
+          `WARNING root "${label}" on "${server}" ${verdict.denied.message} (rule ${verdict.denied.ruleId}; warn mode, not blocked).`,
+          { event: "call_warning", tool: label, rule: verdict.denied.ruleId, reason: verdict.denied.message },
+        );
+      }
+      kept.push(root);
+    }
+    if (!changed) return null;
+    return { ...msg, result: { ...result, roots: kept } };
+  }
+
   // ---------------------------------------------------------------- server → client
 
   /**
@@ -543,6 +595,10 @@ export class Firewall {
     }
     if (msg.method === "notifications/message") return this.checkLog(msg);
     if (msg.method === "notifications/progress") return this.checkProgress(msg);
+    if (msg.method === "roots/list" && "id" in msg) {
+      this.rootsIdsAwaitingAnswer.add(String(msg.id));
+      return null;
+    }
     if ("method" in msg || !("id" in msg)) return null;
     const key = idKey(scope, msg.id);
 

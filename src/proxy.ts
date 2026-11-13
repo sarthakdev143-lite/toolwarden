@@ -87,18 +87,23 @@ export function runProxy(firewall: Firewall, command: string, args: string[]): P
       // JSON-RPC batches are rare in MCP, but handle them element by element.
       if (Array.isArray(parsed.value)) {
         const forwarded: unknown[] = [];
+        let replaced = false;
         for (const item of parsed.value) {
           const d = firewall.onClientMessage(item);
-          if (d.forward) forwarded.push(item);
+          if (d.send) {
+            forwarded.push(d.send);
+            replaced = true;
+          } else if (d.forward) forwarded.push(item);
           if (d.reply) toClient(JSON.stringify(d.reply));
         }
-        if (forwarded.length === parsed.value.length) toServer(line);
+        if (!replaced && forwarded.length === parsed.value.length) toServer(line);
         else if (forwarded.length > 0) toServer(JSON.stringify(forwarded));
         return;
       }
 
       const decision = firewall.onClientMessage(parsed.value);
-      if (decision.forward) toServer(line);
+      if (decision.send) toServer(JSON.stringify(decision.send));
+      else if (decision.forward) toServer(line);
       if (decision.reply) toClient(JSON.stringify(decision.reply));
     });
 
