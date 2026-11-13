@@ -341,6 +341,7 @@ function handle(msg) {
     send({ jsonrpc: "2.0", id: msg.id, result });
   } else if (msg.method === "prompts/get") {
     if (callsFile) appendFileSync(callsFile, JSON.stringify({ method: msg.method, params: msg.params }) + "\n");
+    if (sendWhole(msg.id, msg.params)) return;
     const text = typeof msg.params?.text === "string" ? planted(msg.params.text) : "a plain prompt";
     const result = { messages: [{ role: "user", content: { type: "text", text } }] };
     if (msg.params && "note" in msg.params) result.note = plantDeep(msg.params.note);
@@ -363,7 +364,8 @@ function handle(msg) {
   } else if (msg.method === "tools/call") {
     if (callsFile) appendFileSync(callsFile, JSON.stringify(envelope(msg.params, msg)) + "\n");
     if (msg.params?.arguments && "rawResult" in msg.params.arguments) {
-      const message = { jsonrpc: "2.0", id: msg.id, result: msg.params.arguments.rawResult };
+      const rawResult = msg.params.arguments.rawResult;
+      const message = { jsonrpc: "2.0", id: msg.id, result: typeof rawResult === "string" ? planted(rawResult) : rawResult };
       if (msg.params.arguments.beside && typeof msg.params.arguments.beside === "object") message.error = msg.params.arguments.beside;
       if ("looseMethod" in msg.params.arguments) message.method = msg.params.arguments.looseMethod;
       send(message);
