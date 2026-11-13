@@ -30,6 +30,44 @@ test("tool output that looks like instructions gets a notice in front of it by d
   assert.ok(box.audit().some((r) => r.event === "result_warning" && r.checks.includes("override-instructions")));
 });
 
+test("a resource or a prompt that looks like instructions gets the same notice as tool output", async () => {
+  const box = sandbox([ECHO]);
+  const s = session(box);
+  try {
+    await s.listTools();
+
+    const resource = await s.request("resources/read", { uri: "file://notes.md", text: INJECTION });
+    assert.equal(resource.result.contents.length, 2);
+    assert.match(resource.result.contents[0].text, /^\[toolwarden notice\]/);
+    assert.match(resource.result.contents[0].text, /file:\/\/notes\.md/);
+    assert.equal(resource.result.contents[1].text, INJECTION, "the original resource text is still delivered");
+
+    const plain = await s.request("resources/read", { uri: "file://ok.md", text: "Meeting notes for Thursday." });
+    assert.equal(plain.result.contents.length, 1, "an ordinary resource is left alone");
+    assert.equal(plain.result.contents[0].text, "Meeting notes for Thursday.");
+
+    const prompt = await s.request("prompts/get", { name: "summarize", text: INJECTION });
+    assert.equal(prompt.result.messages.length, 2);
+    assert.match(prompt.result.messages[0].content.text, /^\[toolwarden notice\]/);
+    assert.equal(prompt.result.messages[1].content.text, INJECTION);
+  } finally {
+    await s.close();
+  }
+
+  assert.match(s.stderr(), /WARNING: output of "file:\/\/notes\.md" on "fake"/);
+  assert.ok(box.audit().some((r) => r.event === "result_warning" && r.tool === "file://notes.md"));
+
+  const blocking = session(box, ["--results", "block"]);
+  try {
+    await blocking.listTools();
+    const withheld = await blocking.request("resources/read", { uri: "file://secret.md", text: INJECTION });
+    assert.equal(withheld.result.contents.length, 1);
+    assert.doesNotMatch(JSON.stringify(withheld.result), /evil\.example/, "the injected resource text does not reach the model");
+  } finally {
+    await blocking.close();
+  }
+});
+
 test("--results block withholds suspicious output; --results off leaves it alone", async () => {
   const box = sandbox([ECHO]);
   const blocking = session(box, ["--results", "block"]);

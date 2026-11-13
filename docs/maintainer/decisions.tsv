@@ -17,3 +17,7 @@ ts	phase	decision	why	evidence	result
 2026-11-12T23:53:02Z	red	a bidi isolate in a tool description was not flagged, and the old class included the zero-width joiner	the definition check used a source range that skipped U+2066 to U+2069 and included U+200D	test/unit.test.mjs	failed as expected
 2026-11-12T23:53:02Z	green	isolates are flagged, emoji joiners are not, and the full suite passes	the check is a warning on the definition the reviewer reads	npm test	37 pass, 0 fail
 2026-11-12T23:53:02Z	review	comment review found no new comments to remove	the diff is the character class and two assertions	comment review on the diff	0 deletions
+2026-11-13T00:11:32Z	merge	merged the bidi isolate fix after 5 CI checks passed	a definition that uses an isolate is flagged, and a family emoji is not	https://github.com/sarthakdev143-lite/toolwarden/pull/4	merged 29abb2e
+2026-11-13T00:11:32Z	red	a poisoned resources/read result reached the client with no notice	only tools/call results were scanned, so a document or prompt could carry the same instructions	test/results-flow.test.mjs	failed as expected, 1 content item instead of 2
+2026-11-13T00:11:32Z	green	resource and prompt results get the same notice or withhold as tool output	the notice is placed in contents or messages, which is what the client shows the model	npm test	38 pass, 0 fail
+2026-11-13T00:11:32Z	review	comment review removed one private narration	the three result shapes are visible in the function body	comment review on the diff	1 deletion
