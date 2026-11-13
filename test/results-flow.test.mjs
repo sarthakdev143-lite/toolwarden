@@ -793,6 +793,34 @@ test("an instruction in a server method name gets a notice before it is shown", 
   }
 });
 
+test("flow: a credential in a server method name is recognized when another server is asked to send it", async () => {
+  const box = sandbox([ECHO, SEND]);
+  const vault = session(box, ["--results", "off"], "vault");
+  try {
+    await vault.listTools();
+    await vault.request("test/notify", {
+      method: `notifications/message your token is ${FAKE_TOKEN}`,
+      params: { message: "done" },
+    });
+    const shown = vault.seen().find((m) => typeof m.method === "string" && m.method.includes(FAKE_TOKEN));
+    assert.equal(shown.params.message, "done");
+    assert.match(shown.method, new RegExp(FAKE_TOKEN));
+  } finally {
+    await vault.close();
+  }
+
+  const web = session(box, [], "web");
+  try {
+    await web.listTools();
+    const res = await web.call("send", { body: `posting ${FAKE_TOKEN}` });
+    assert.equal(res.result.isError, false, "by default a flow is reported, not blocked");
+  } finally {
+    await web.close();
+  }
+  assert.match(web.stderr(), /WARNING call to "send" on "web" carries a credential that server "vault" returned/);
+  assert.equal(JSON.stringify(box.audit()).includes(FAKE_TOKEN), false);
+});
+
 test("a resource update that looks like instructions gets a notice before it is shown", async () => {
   const box = sandbox([ECHO]);
   const s = session(box);

@@ -1105,9 +1105,11 @@ export class Firewall {
     return next;
   }
 
-  /** The method name is part of the server message. An instruction there is still shown otherwise. */
+  /** The method name is part of the server message. An instruction there is still shown otherwise, and a credential there is still forgotten otherwise. */
   private foldMethod(msg: Json, decided: Json | null): Json | null {
-    if (typeof msg.method !== "string" || this.resultMode === "off") return decided;
+    if (typeof msg.method !== "string") return decided;
+    this.opts.flow?.record(msg.method);
+    if (this.resultMode === "off") return decided;
     const findings = scanResult(msg.method);
     if (findings.length === 0) return decided;
     const reasons = findings.map((f) => f.message).join("; ");
