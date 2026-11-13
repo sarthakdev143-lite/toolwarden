@@ -362,7 +362,8 @@ function handle(msg) {
     if (callsFile) appendFileSync(callsFile, JSON.stringify({ method: msg.method, params: msg.params }) + "\n");
     if (sendWhole(msg.id, msg.params)) return;
     const text = typeof msg.params?.text === "string" ? planted(msg.params.text) : "a plain prompt";
-    const result = { messages: [{ role: "user", content: { type: "text", text } }] };
+    const message = { role: "user", content: { type: "text", text } };
+    const result = { messages: msg.params?.looseMessages ? message : [message] };
     if (msg.params && "note" in msg.params) result.note = plantDeep(msg.params.note);
     send({ jsonrpc: "2.0", id: msg.id, result });
   } else if (msg.method === "completion/complete") {
