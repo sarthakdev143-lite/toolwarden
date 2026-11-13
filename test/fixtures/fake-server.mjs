@@ -54,8 +54,16 @@ process.stdin.on("data", (chunk) => {
 });
 process.stdin.on("end", () => process.exit(0));
 
+function noteMarked(msg) {
+  if (!callsFile) return;
+  const text = JSON.stringify(msg.params ?? null);
+  if (!text.includes("id_rsa") && !text.includes("%2essh") && !text.includes("marker-list")) return;
+  appendFileSync(callsFile, JSON.stringify({ method: msg.method, params: msg.params }) + "\n");
+}
+
 function handle(msg) {
   if (msg.method === "initialize") {
+    noteMarked(msg);
     const result = {
       protocolVersion: "2025-06-18",
       capabilities: { tools: { listChanged: true } },
@@ -136,8 +144,10 @@ function handle(msg) {
     }
     if (msg.id !== undefined) send({ jsonrpc: "2.0", id: msg.id, result: { ok: true } });
   } else if (msg.method === "tools/list") {
+    noteMarked(msg);
     send({ jsonrpc: "2.0", id: msg.id, result: listResult(msg.params?.cursor) });
   } else if (msg.method === "resources/list") {
+    noteMarked(msg);
     const resources = Array.isArray(msg.params?.resources) ? msg.params.resources : [];
     send({ jsonrpc: "2.0", id: msg.id, result: { resources } });
   } else if (msg.method === "prompts/list") {

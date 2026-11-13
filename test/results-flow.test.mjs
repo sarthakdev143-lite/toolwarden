@@ -3623,3 +3623,88 @@ test("flow: a credential in a non-object server result is recognized when anothe
   assert.match(web.stderr(), /WARNING call to "send" on "web" carries a credential that server "vault" returned/);
   assert.equal(JSON.stringify(box.audit()).includes(FAKE_TOKEN), false);
 });
+
+test("a credential path in a list or initialize request never reaches the server", async () => {
+  const box = sandbox([ECHO]);
+  const ssh = "file:///home/me/.ssh/id_rsa";
+  const encoded = "file:///home/me/%2essh/%69d_rsa";
+  const s = session(box);
+  try {
+    await s.listTools();
+    const listed = s.wait("list-cursor");
+    s.send({ jsonrpc: "2.0", id: "list-cursor", method: "tools/list", params: { cursor: ssh } });
+    const blocked = await listed;
+    assert.equal(blocked.error.code, -32000);
+    assert.match(blocked.error.message, /Blocked by toolwarden policy/);
+
+    const init = s.wait("init-path");
+    s.send({
+      jsonrpc: "2.0",
+      id: "init-path",
+      method: "initialize",
+      params: { protocolVersion: "2025-06-18", clientInfo: { name: "app\n" + ssh } },
+    });
+    const lined = await init;
+    assert.equal(lined.error.code, -32000);
+
+    const resources = s.wait("res-list");
+    s.send({ jsonrpc: "2.0", id: "res-list", method: "resources/list", params: encoded });
+    const foreign = await resources;
+    assert.equal(foreign.error.code, -32000);
+    assert.match(foreign.error.message, /Blocked by toolwarden policy/);
+
+    const ok = await s.call("echo", { echo: "marker-ok" });
+    assert.equal(ok.result.content[0].text, "marker-ok");
+  } finally {
+    await s.close();
+  }
+  const calls = JSON.stringify(box.serverCalls());
+  assert.doesNotMatch(calls, /id_rsa|%2essh|\.ssh/);
+  assert.match(calls, /marker-ok/);
+  assert.match(s.stderr(), /DENIED request "tools\/list"/);
+  assert.match(s.stderr(), /DENIED request "initialize"/);
+  assert.match(s.stderr(), /DENIED request "resources\/list"/);
+
+  const warning = session(box, ["--mode", "warn"]);
+  try {
+    await warning.listTools();
+    const kept = warning.wait("list-warn");
+    warning.send({
+      jsonrpc: "2.0",
+      id: "list-warn",
+      method: "tools/list",
+      params: { cursor: ssh, note: "marker-list-warn" },
+    });
+    const delivered = await kept;
+    assert.equal(delivered.error, undefined);
+    assert.ok(Array.isArray(delivered.result.tools));
+  } finally {
+    await warning.close();
+  }
+  assert.match(warning.stderr(), /warn mode, not blocked/);
+  assert.match(JSON.stringify(box.serverCalls()), /marker-list-warn/);
+});
+
+test("flow: a credential in a list request is reported when another server is asked to repeat it", async () => {
+  const box = sandbox([ECHO, SEND]);
+  const vault = session(box, [], "vault");
+  try {
+    await vault.listTools();
+    await vault.call("echo", { echo: `your token is ${FAKE_TOKEN}` });
+    await vault.request("tools/list", { cursor: FAKE_TOKEN });
+  } finally {
+    await vault.close();
+  }
+  assert.doesNotMatch(vault.stderr(), /returned \d+ minute/);
+
+  const web = session(box, [], "web");
+  try {
+    await web.listTools();
+    const res = await web.request("tools/list", { cursor: FAKE_TOKEN });
+    assert.ok(Array.isArray(res.result.tools));
+  } finally {
+    await web.close();
+  }
+  assert.match(web.stderr(), /WARNING request to "tools\/list" on "web" carries a credential that server "vault" returned/);
+  assert.equal(JSON.stringify(box.audit()).includes(FAKE_TOKEN), false);
+});
