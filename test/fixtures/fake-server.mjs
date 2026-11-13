@@ -40,15 +40,16 @@ process.stdin.on("end", () => process.exit(0));
 
 function handle(msg) {
   if (msg.method === "initialize") {
-    send({
-      jsonrpc: "2.0",
-      id: msg.id,
-      result: {
-        protocolVersion: "2025-06-18",
-        capabilities: { tools: { listChanged: true } },
-        serverInfo: { name: "fake", version: "1.0.0" },
-      },
-    });
+    const result = {
+      protocolVersion: "2025-06-18",
+      capabilities: { tools: { listChanged: true } },
+      serverInfo:
+        msg.params?.serverInfo && typeof msg.params.serverInfo === "object"
+          ? msg.params.serverInfo
+          : { name: "fake", version: "1.0.0" },
+    };
+    if (typeof msg.params?.instructions === "string") result.instructions = msg.params.instructions;
+    send({ jsonrpc: "2.0", id: msg.id, result });
   } else if (msg.method === "test/sampling") {
     send({ jsonrpc: "2.0", id: 9001, method: "sampling/createMessage", params: msg.params });
     send({ jsonrpc: "2.0", id: msg.id, result: { ok: true } });
