@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { join } from "node:path";
 import { DASHBOARD_HTML } from "./dashboard-page.js";
-import { approve, listServers, loadPins, savePins } from "./pins.js";
+import { approveReviewed, listServers, loadPins, savePins, type ReviewedTool } from "./pins.js";
 import { scanTool } from "./scan.js";
 
 /**
@@ -56,6 +56,7 @@ function buildState(stateDir: string): Json {
           .sort(([a], [b]) => a.localeCompare(b))
           .map(([tool, entry]) => ({
             name: tool,
+            hash: entry.hash,
             kind: entry.kind,
             seenAt: entry.seenAt,
             before: entry.kind === "changed" ? describe(pins.tools[tool]?.definition) : null,
@@ -125,6 +126,18 @@ function readJsonBody(req: IncomingMessage): Promise<unknown> {
   });
 }
 
+function reviewedTools(value: unknown): ReviewedTool[] | null {
+  if (!Array.isArray(value) || value.length === 0) return null;
+  const reviews: ReviewedTool[] = [];
+  for (const item of value) {
+    if (item === null || typeof item !== "object" || Array.isArray(item)) return null;
+    const rec = item as Json;
+    if (typeof rec.name !== "string" || rec.name === "" || typeof rec.hash !== "string" || rec.hash === "") return null;
+    reviews.push({ name: rec.name, hash: rec.hash });
+  }
+  return reviews;
+}
+
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" }).end(JSON.stringify(body));
 }
@@ -188,9 +201,9 @@ export function startDashboard(stateDir: string, port: number, token = randomByt
         return;
       }
       const b = (body ?? {}) as Json;
-      const tools = Array.isArray(b.tools) ? b.tools.filter((t): t is string => typeof t === "string") : [];
-      if (typeof b.server !== "string" || tools.length === 0) {
-        sendJson(res, 400, { error: "need a server and at least one tool" });
+      const reviews = reviewedTools(b.tools);
+      if (typeof b.server !== "string" || !reviews) {
+        sendJson(res, 400, { error: "need a server and each tool's name with the hash you reviewed" });
         return;
       }
       const pins = listServers(stateDir).includes(b.server) ? loadPins(stateDir, b.server) : null;
@@ -198,9 +211,16 @@ export function startDashboard(stateDir: string, port: number, token = randomByt
         sendJson(res, 404, { error: "no such server" });
         return;
       }
-      const approved = approve(pins, tools);
-      if (approved.length > 0) savePins(stateDir, pins);
-      sendJson(res, 200, { approved });
+      const result = approveReviewed(pins, reviews);
+      if (result.stale.length > 0) {
+        sendJson(res, 409, {
+          error: "a definition changed after you opened it. Look at the new version before approving.",
+          stale: result.stale,
+        });
+        return;
+      }
+      if (result.approved.length > 0) savePins(stateDir, pins);
+      sendJson(res, 200, { approved: result.approved });
       return;
     }
     sendJson(res, 404, { error: "not found" });

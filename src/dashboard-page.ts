@@ -246,7 +246,7 @@ details.server .body { padding: 0 16px 14px; }
           api("/api/approve", {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({ server: s.server, tools: [p.name] })
+            body: JSON.stringify({ server: s.server, tools: [{ name: p.name, hash: p.hash }] })
           }).then(refresh).catch(function (err) { button.disabled = false; showError(err.message); });
         });
         actions.appendChild(button);

@@ -36,6 +36,7 @@ try to reach the dashboard or the HTTP proxy.
 | Attack | Defence | Strength |
 |---|---|---|
 | A tool's definition changes after approval | Definitions are hashed on first use; a changed tool is hidden and its calls are blocked until approved | Strong: any change to the definition is detected |
+| A review approves a definition that changed again | The dashboard pins a tool only when its hash is still the one on the page; otherwise the whole request is refused | Strong |
 | A new tool appears later | It is quarantined until approved | Strong |
 | The model is talked into reading credentials | Tool calls, resource URIs and prompt arguments that reference credential locations are denied | Partial: pattern matching on arguments |
 | A tool, resource or prompt result carries instructions | Results, structured tool output, and tool errors are scanned; a notice is added, or the text is withheld. Descriptions in resource, prompt, and resource-template listings are reported. A sampling request and the server's introduction are treated the same way | Partial: pattern matching on text |
@@ -75,6 +76,11 @@ with a notice in front. A model can still be fooled. `--results block` withholds
 
 **The audit log is local and editable.** It is a record for the person, not tamper-proof
 evidence.
+
+**`toolwarden approve` pins what is waiting when it runs.** The dashboard will not pin
+a version you did not see. A listing that arrives between `toolwarden status` and
+`toolwarden approve` can be the version that gets pinned. Use the dashboard when the
+tool may still be changing.
 
 ## Design choices that follow from this
 
