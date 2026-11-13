@@ -138,6 +138,7 @@ function withholdLog(params: Json, text: string): Json {
   return { level, data: text };
 }
 
+/** The request id is how the client matches the cancellation, so it is left unchanged. An instruction there is still shown otherwise. A credential path there is still shown otherwise. */
 function annotateCancel(params: Json, text: string): Json {
   const next: Json = {};
   for (const [key, value] of Object.entries(params)) {
@@ -1638,7 +1639,7 @@ export class Firewall {
     return { ...base, result: nextResult };
   }
 
-  /** A list item, a definition reply, a field beside a list, a sampling system prompt, a sampling message, the method on a server message, the protocol version, a value that is not a JSON-RPC object, the id of a server message, a field beside a server message, parameters that are not an object, a result or an error on a server request or notification, a progress token, an elicitation question, a resource update, or any other server notice is still part of what the model reads. A credential path there is still shown otherwise. */
+  /** A list item, a definition reply, a field beside a list, a sampling system prompt, a sampling message, the method on a server message, the protocol version, a value that is not a JSON-RPC object, the id of a server message, a field beside a server message, parameters that are not an object, a result or an error on a server request or notification, a progress token, an elicitation question, a resource update, any other server notice, or a cancellation id is still part of what the model reads. A credential path there is still shown otherwise. */
   private warnLooseDefinition(item: unknown, label: string): void {
     const shown = scanResult(item);
     const findings = scanTool(item).filter((finding) => !shown.some((have) => have.id === finding.id));
@@ -1852,9 +1853,11 @@ export class Firewall {
     return { ...msg, params: withhold ? withholdProgress(params, text) : annotateProgress(params, text) };
   }
 
+  /** The request id is how the client matches the cancellation, so it is left unchanged. An instruction there is still shown otherwise. A credential path there is still shown otherwise. */
   private checkCancel(msg: Json): Json | null {
     const params = isObject(msg.params) ? msg.params : {};
     this.opts.flow?.record(params);
+    if ("requestId" in params) this.warnLooseDefinition(params.requestId, "cancellation id");
     if (this.resultMode === "off") return null;
     const findings = scanResult(params);
     if (findings.length === 0) return null;

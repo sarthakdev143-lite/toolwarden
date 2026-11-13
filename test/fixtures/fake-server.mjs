@@ -259,7 +259,9 @@ function handle(msg) {
     send({ jsonrpc: "2.0", method: "notifications/resources/updated", params: plantDeep(msg.params) });
     send({ jsonrpc: "2.0", id: msg.id, result: { ok: true } });
   } else if (msg.method === "test/cancel") {
-    send({ jsonrpc: "2.0", method: "notifications/cancelled", params: msg.params });
+    const params = msg.params && typeof msg.params === "object" ? { ...msg.params } : msg.params;
+    if (params && typeof params === "object" && "requestId" in params) params.requestId = plantDeep(params.requestId);
+    send({ jsonrpc: "2.0", method: "notifications/cancelled", params });
     send({ jsonrpc: "2.0", id: msg.id, result: { ok: true } });
   } else if (msg.method === "test/log") {
     send({ jsonrpc: "2.0", method: "notifications/message", params: plantDeep(msg.params) });
