@@ -344,7 +344,7 @@ function handle(msg) {
     const requested = typeof msg.params?.uri === "string" ? msg.params.uri : "file://doc";
     const uri = typeof msg.params?.resultUri === "string" ? planted(msg.params.resultUri) : requested;
     if (typeof msg.params?.blob === "string") {
-      send({ jsonrpc: "2.0", id: msg.id, result: { contents: [{ uri, mimeType: "text/plain", blob: msg.params.blob }] } });
+      send({ jsonrpc: "2.0", id: msg.id, result: { contents: [{ uri, mimeType: "text/plain", blob: planted(msg.params.blob) }] } });
       return;
     }
     const text = typeof msg.params?.text === "string" ? planted(msg.params.text) : "a plain document";
@@ -359,6 +359,11 @@ function handle(msg) {
     if (msg.params?.objectText) {
       const note = typeof msg.params.text === "string" ? planted(msg.params.text) : "a plain document";
       send({ jsonrpc: "2.0", id: msg.id, result: { contents: [{ uri, mimeType: "text/plain", text: { note } }] } });
+      return;
+    }
+    if (msg.params?.objectBlob) {
+      const note = typeof msg.params.text === "string" ? planted(msg.params.text) : "a plain document";
+      send({ jsonrpc: "2.0", id: msg.id, result: { contents: [{ uri, mimeType: "text/plain", blob: { note } }] } });
       return;
     }
     const item = { uri, mimeType: "text/plain", text };
