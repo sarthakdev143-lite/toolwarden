@@ -78,7 +78,7 @@ function annotateIntro(result: Json, text: string): Json {
     next[key] = prefixSuspicious(value, text);
   }
   const current = result.instructions;
-  next.instructions = typeof current === "string" && current !== "" ? text + "\n\n" + current : text;
+  next.instructions = keepShown(current, text);
   return next;
 }
 
@@ -89,6 +89,13 @@ function prefixSuspicious(value: unknown, notice: string): unknown {
     return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, prefixSuspicious(v, notice)]));
   }
   return value;
+}
+
+/** Suspicious text still reaches the reader with a notice in front, including when that text is not a string. */
+function keepShown(current: unknown, text: string): unknown {
+  if (typeof current === "string" && current !== "") return text + "\n\n" + current;
+  if (Array.isArray(current) || isObject(current)) return prefixSuspicious(current, text);
+  return text;
 }
 
 function scrubSuspicious(value: unknown): unknown {
@@ -106,7 +113,7 @@ function annotateFailure(error: Json, text: string): Json {
     if (key === "message" || key === "code") continue;
     next[key] = prefixSuspicious(value, text);
   }
-  next.message = typeof error.message === "string" ? text + "\n\n" + error.message : text;
+  next.message = typeof error.message === "string" ? text + "\n\n" + error.message : keepShown(error.message, text);
   return next;
 }
 
@@ -232,7 +239,7 @@ function annotateElicit(params: Json, text: string): Json {
     next[key] = prefixSuspicious(value, text);
   }
   const current = params.message;
-  next.message = typeof current === "string" && current !== "" ? text + "\n\n" + current : text;
+  next.message = keepShown(current, text);
   return next;
 }
 
