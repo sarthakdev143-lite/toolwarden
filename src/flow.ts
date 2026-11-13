@@ -16,8 +16,9 @@ import { collectText } from "./scan.js";
  * client request, or returns text, we remember
  * fingerprints (hashes, never the values) of the distinctive tokens in it. When
  * a call to a *different* server carries one of those tokens in its arguments,
- * in a filesystem root, in any other client message, or in the answer to a
- * server request, that is a data flow
+ * in a filesystem root, in any other client message, in the answer to a
+ * question, in a sampling reply, or in the answer to any other server
+ * request, including a field beside that answer, that is a data flow
  * between servers: the pattern behind "read a secret with one tool, send it out
  * with another".
  */
