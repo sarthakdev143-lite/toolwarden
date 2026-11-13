@@ -117,14 +117,53 @@ export class Firewall {
           : typeof params.name === "string" && params.name !== ""
             ? params.name
             : "prompt";
-      this.pendingCalls.set(idKey(scope, msg.id), {
-        label,
-        kind: msg.method === "resources/read" ? "resource" : "prompt",
-      });
+      const kind = msg.method === "resources/read" ? "resource" : "prompt";
+      const denied = this.policyDecision(msg, label, kind, params);
+      if (denied) return denied;
+      this.pendingCalls.set(idKey(scope, msg.id), { label, kind });
       return { forward: true };
     }
 
     return { forward: true };
+  }
+
+  private policyDecision(
+    msg: Json,
+    label: string,
+    kind: "resource" | "prompt",
+    args: unknown,
+  ): ClientDecision | null {
+    const { server, audit } = this.opts;
+    const verdict = this.opts.policy.evaluate(String(msg.method), args);
+    for (const w of verdict.warnings) {
+      audit.alert(`WARNING request "${label}" on "${server}" ${w.message} (rule ${w.ruleId}).`, {
+        event: "call_warning",
+        tool: label,
+        rule: w.ruleId,
+        reason: w.message,
+      });
+    }
+    if (!verdict.denied) return null;
+    const d = verdict.denied;
+    if (this.opts.mode !== "block") {
+      audit.alert(
+        `WARNING request "${label}" on "${server}" ${d.message} (rule ${d.ruleId}; warn mode, not blocked).`,
+        { event: "call_warning", tool: label, rule: d.ruleId, reason: d.message },
+      );
+      return null;
+    }
+    audit.alert(`DENIED request "${label}" on "${server}": it ${d.message} (rule ${d.ruleId}).`, {
+      event: "call_denied",
+      tool: label,
+      rule: d.ruleId,
+      reason: d.message,
+      args: summarizeArgs(args),
+    });
+    const text =
+      `Blocked by toolwarden policy: this request ${d.message} (rule "${d.ruleId}"). ` +
+      `If the user really wants this, they need to change the toolwarden policy themselves.`;
+    if (!("id" in msg)) return { forward: false };
+    return { forward: false, reply: { jsonrpc: "2.0", id: msg.id, result: this.placeNotice({}, kind, text, true) } };
   }
 
   private checkCall(msg: Json): ClientDecision {
