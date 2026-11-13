@@ -139,7 +139,7 @@ $ toolwarden approve weather get_weather
 
 `toolwarden status` exits with code 1 while anything is waiting for review, so you can use it in scripts.
 
-The dashboard can approve changes, so it is locked down: it listens on `127.0.0.1` only, needs the access token in the link it prints, and refuses requests from other sites.
+The dashboard can approve changes, so it is locked down: it listens on `127.0.0.1` only, needs the access token in the link it prints, and refuses requests from other sites. Approving on the page pins the version you are looking at. If that tool changes again before you click, the click is refused and the new version stays hidden. `toolwarden approve` pins whatever is waiting at the moment you run it.
 
 ## Commands
 
@@ -149,7 +149,7 @@ The dashboard can approve changes, so it is locked down: it listens on `127.0.0.
 | `toolwarden run [options] -- <server command>` | Run a local server behind the firewall |
 | `toolwarden http [options] --target <url>` | Run a local proxy in front of a remote server |
 | `toolwarden status [server]` | Show approved tools and anything waiting for review |
-| `toolwarden approve <server> [tool...]` | Approve changed or new tools |
+| `toolwarden approve <server> [tool...]` | Approve the definitions waiting right now |
 | `toolwarden log [-n 30]` | Show recent audit log entries |
 | `toolwarden dashboard [--port 7878]` | Open the local dashboard |
 

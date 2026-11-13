@@ -84,3 +84,15 @@ export function approve(pins: PinFile, toolNames: string[]): string[] {
   }
   return approved;
 }
+
+export interface ReviewedTool {
+  name: string;
+  hash: string;
+}
+
+/** Pin these definitions only when every hash is still pending. Otherwise pin nothing. */
+export function approveReviewed(pins: PinFile, reviews: ReviewedTool[]): { approved: string[]; stale: string[] } {
+  const stale = reviews.filter((review) => pins.pending[review.name]?.hash !== review.hash).map((review) => review.name);
+  if (stale.length > 0) return { approved: [], stale };
+  return { approved: approve(pins, reviews.map((review) => review.name)), stale: [] };
+}

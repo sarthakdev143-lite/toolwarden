@@ -25,7 +25,7 @@ Usage:
   toolwarden run [options] -- <server command>   Run a local MCP server behind the firewall
   toolwarden http [options] --target <url>       Run a local proxy in front of a remote MCP server
   toolwarden status [server]                     Show approved tools and anything waiting for review
-  toolwarden approve <server> [tool...]          Approve changed or new tools (all pending if none named)
+  toolwarden approve <server> [tool...]          Approve the definitions waiting right now (all of them if none are named)
   toolwarden log [-n <count>]                    Show recent audit log entries
   toolwarden dashboard [--port 7878]             Open a local web page for reviews and the log
 
