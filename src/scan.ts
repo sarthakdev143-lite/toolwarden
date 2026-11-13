@@ -115,14 +115,14 @@ function encodedText(key: string, value: unknown): string | null {
   return decodedBlob(value);
 }
 
-/** Includes text stored in a base64 blob (URL-safe, unpadded, or written with a compatibility or invisible character), including when that blob is a list or an object, including an object in that list and an object inside that object, and an object inside that blob object, including an object inside that one, and in a list in that blob object, including a list in that list, in image and audio data, including when that data is a list or an object, including an object in that list and an object inside that object, and an object inside that data object, including an object inside that one, and in a list in that data object, including a list in that list, and in object keys. */
+/** Includes text stored in a base64 blob (URL-safe, unpadded, or written with a compatibility or invisible character), including when that blob is a list or an object, including an object in that list and an object inside that object, and an object inside that blob object, including an object inside that one, and in a list in that blob object, including a list in that list, including a list in that one, in image and audio data, including when that data is a list or an object, including an object in that list and an object inside that object, and an object inside that data object, including an object inside that one, and in a list in that data object, including a list in that list, and in object keys. */
 export function collectText(value: unknown): string[] {
   const out: string[] = [];
   collectStrings(value, out, false);
   return out;
 }
 
-function collectStrings(value: unknown, out: string[], decode: boolean, decodeItems = false, decodeNested = false, extra = false, objectLists = false, nestedLists = false): void {
+function collectStrings(value: unknown, out: string[], decode: boolean, decodeItems = false, decodeNested = false, extra = false, objectLists = false, nestedLists = false, blobDeeper = false): void {
   if (typeof value === "string") {
     out.push(value);
     if (decode) {
@@ -133,9 +133,12 @@ function collectStrings(value: unknown, out: string[], decode: boolean, decodeIt
   }
   if (Array.isArray(value)) {
     for (const item of value) {
-      if (typeof item === "string") collectStrings(item, out, decode, decodeItems, decodeNested, extra, false, false);
-      else if (Array.isArray(item)) collectStrings(item, out, objectLists && nestedLists ? true : (objectLists ? false : decode), decodeItems, decodeNested, extra, objectLists && nestedLists, false);
-      else collectStrings(item, out, decodeItems, false, decodeNested, extra, false, false);
+      if (typeof item === "string") collectStrings(item, out, decode, decodeItems, decodeNested, extra, false, false, false);
+      else if (Array.isArray(item)) {
+        const oneMore = objectLists && nestedLists;
+        const blobMore = objectLists && blobDeeper && !nestedLists;
+        collectStrings(item, out, oneMore || blobMore ? true : (objectLists ? false : decode), decodeItems, decodeNested, extra, oneMore || blobMore, false, oneMore && blobDeeper);
+      } else collectStrings(item, out, decodeItems, false, decodeNested, extra, false, false, false);
     }
     return;
   }
@@ -147,8 +150,9 @@ function collectStrings(value: unknown, out: string[], decode: boolean, decodeIt
       const nestedObject = decodeNested && objectValue;
       const listed = objectLists && Array.isArray(v);
       const decodedObject = (key === "blob" || key === "data") && objectValue;
+      const blobObject = key === "blob" && objectValue;
       const child = key === "data" || key === "blob" || ((decode || decodeNested) && typeof v === "string") || nestedObject || listed;
-      collectStrings(v, out, child, inDecodedList, inDecodedList || inDecodedObject || (extra && nestedObject), inDecodedObject, decodedObject || listed, decodedObject || (listed && nestedLists));
+      collectStrings(v, out, child, inDecodedList, inDecodedList || inDecodedObject || (extra && nestedObject), inDecodedObject, decodedObject || listed, decodedObject || (listed && nestedLists), blobObject || (listed && blobDeeper));
       out.push(key);
     }
   }
