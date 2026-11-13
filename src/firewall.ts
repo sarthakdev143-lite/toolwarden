@@ -352,6 +352,8 @@ export class Firewall {
           }
         }
         if (this.rootsIdsAwaitingAnswer.delete(id) && "result" in msg) {
+          const loose = this.looseRoots(msg);
+          if (loose) return loose;
           const rewritten = this.rewriteRoots(msg);
           if (rewritten) return { forward: true, send: rewritten };
         }
@@ -775,6 +777,15 @@ export class Firewall {
       id: request.id,
       result: { content: [{ type: "text", text }], isError: true },
     };
+  }
+
+  /** A filesystem root that is not an array is still an answer. A credential path there still reaches the server otherwise. */
+  private looseRoots(msg: Json): ClientDecision | null {
+    const result = msg.result;
+    if (isObject(result) && Array.isArray(result.roots)) return null;
+    const denied = this.policyDecision(msg, "roots", "other", result, "roots/list");
+    if (denied) return denied;
+    return this.flowDecision(msg, "roots", "answer", result);
   }
 
   /** A roots reply with a credential path, or a root a flow rule denies, has that root removed before the server sees it. An ordinary list is left unchanged. */
