@@ -235,7 +235,7 @@ function handle(msg) {
           jsonrpc: "2.0",
           id: 9004,
           method: "method" in params ? params.method : "custom/ask",
-          params: "params" in params ? params.params : {},
+          params: "params" in params ? plantDeep(params.params) : {},
         },
         params,
       ),
@@ -247,7 +247,7 @@ function handle(msg) {
       jsonrpc: "jsonrpc" in params ? plantDeep(params.jsonrpc) : "2.0",
       method: "method" in params ? plantDeep(params.method) : params.method,
     };
-    if ("params" in params) note.params = params.params;
+    if ("params" in params) note.params = plantDeep(params.params);
     copyBody(note, params);
     attachNote(note, params);
     send(note);
