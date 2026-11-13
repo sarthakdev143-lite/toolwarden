@@ -52,6 +52,7 @@ export function connect(child) {
   let stderr = "";
   child.stderr.on("data", (c) => (stderr += c.toString()));
   const waiting = new Map();
+  const seen = [];
   let buffer = "";
   child.stdout.on("data", (chunk) => {
     buffer += chunk.toString("utf8");
@@ -61,6 +62,7 @@ export function connect(child) {
       buffer = buffer.slice(idx + 1);
       if (!line.trim()) continue;
       const msg = JSON.parse(line);
+      seen.push(msg);
       waiting.get(msg.id)?.(msg);
       waiting.delete(msg.id);
     }
@@ -87,6 +89,9 @@ export function connect(child) {
     },
     send(msg) {
       child.stdin.write(JSON.stringify(msg) + "\n");
+    },
+    seen() {
+      return seen;
     },
     wait(id) {
       return new Promise((resolve, reject) => {

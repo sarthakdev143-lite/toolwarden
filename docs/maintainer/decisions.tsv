@@ -136,3 +136,7 @@ ts	phase	decision	why	evidence	result
 2026-11-13T03:39:07Z	red	a credential path stored in a base64 blob was allowed	argument rules did not decode blob or image data	test/unit.test.mjs	failed as expected, the ssh path was not denied
 2026-11-13T03:39:07Z	green	a path in a blob, in image data, or percent-encoded inside audio data is denied	ordinary text, a lookalike, and a real PNG stay allowed, and the denied calls never reach the server	npm test	64 pass, 0 fail
 2026-11-13T03:39:07Z	review	kept the rule comment that says blob and image data are matched	the field name does not say which strings a pattern sees	comment review on the diff	0 comments removed
+2026-11-13T03:43:10Z	merge	merged encoded credential-path checks after 5 CI checks passed	a path in a blob or in image data is denied, and ordinary text and a real image stay allowed	https://github.com/sarthakdev143-lite/toolwarden/pull/33	merged c0101cb
+2026-11-13T03:43:10Z	red	a log line of ignore-previous-instructions was shown unchanged	server log notifications were forwarded without a scan	test/results-flow.test.mjs	failed as expected, the log had no notice
+2026-11-13T03:43:10Z	green	a suspicious log starts with the notice, including one in the logger name and a percent-encoded line	a clean log stays, and block mode drops the line and the logger name	npm test	65 pass, 0 fail
+2026-11-13T03:43:10Z	review	the log-message change added no comments	the notice is written into the data field the client shows	comment review on the diff	0 comments removed
