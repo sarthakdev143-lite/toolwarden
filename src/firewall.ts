@@ -1618,6 +1618,7 @@ export class Firewall {
     return { ...base, result: nextResult };
   }
 
+  /** A resource, prompt, or template description is a definition the model reads. A credential path there is still shown otherwise. */
   private checkCatalog(result: Json, kind: CatalogKind): void {
     const items = catalogItems(result, kind);
     if (!Array.isArray(items)) return;
@@ -1626,7 +1627,11 @@ export class Firewall {
     for (const item of items) {
       if (!isObject(item)) continue;
       const label = visibleLabel(catalogLabel(item, kind));
-      const findings = scanResult(item);
+      const shown = scanResult(item);
+      const findings = [
+        ...shown,
+        ...scanTool(item).filter((finding) => !shown.some((have) => have.id === finding.id)),
+      ];
       if (findings.length === 0) continue;
       const hash = hashTool(item);
       for (const f of findings) {
