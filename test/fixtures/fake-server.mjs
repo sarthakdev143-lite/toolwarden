@@ -53,6 +53,9 @@ function handle(msg) {
   } else if (msg.method === "test/sampling") {
     send({ jsonrpc: "2.0", id: 9001, method: "sampling/createMessage", params: msg.params });
     send({ jsonrpc: "2.0", id: msg.id, result: { ok: true } });
+  } else if (msg.method === "test/progress") {
+    send({ jsonrpc: "2.0", method: "notifications/progress", params: msg.params });
+    send({ jsonrpc: "2.0", id: msg.id, result: { ok: true } });
   } else if (msg.method === "test/log") {
     send({ jsonrpc: "2.0", method: "notifications/message", params: msg.params });
     send({ jsonrpc: "2.0", id: msg.id, result: { ok: true } });

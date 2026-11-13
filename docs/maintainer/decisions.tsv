@@ -140,3 +140,7 @@ ts	phase	decision	why	evidence	result
 2026-11-13T03:43:10Z	red	a log line of ignore-previous-instructions was shown unchanged	server log notifications were forwarded without a scan	test/results-flow.test.mjs	failed as expected, the log had no notice
 2026-11-13T03:43:10Z	green	a suspicious log starts with the notice, including one in the logger name and a percent-encoded line	a clean log stays, and block mode drops the line and the logger name	npm test	65 pass, 0 fail
 2026-11-13T03:43:10Z	review	the log-message change added no comments	the notice is written into the data field the client shows	comment review on the diff	0 comments removed
+2026-11-13T03:46:22Z	merge	merged log-message checks after 5 CI checks passed	a suspicious log starts with the notice, a clean log stays, and block mode drops the line	https://github.com/sarthakdev143-lite/toolwarden/pull/34	merged 20b1d66
+2026-11-13T03:46:22Z	red	a progress update of ignore-previous-instructions was shown unchanged	progress notifications were forwarded without a scan	test/results-flow.test.mjs	failed as expected, the update had no notice
+2026-11-13T03:46:22Z	green	a suspicious progress update starts with the notice, including a percent-encoded message	a clean update stays, and block mode drops the message while keeping the progress counts	npm test	66 pass, 0 fail
+2026-11-13T03:46:22Z	review	the progress-update change added no comments	the notice is written into the message the client shows	comment review on the diff	0 comments removed
