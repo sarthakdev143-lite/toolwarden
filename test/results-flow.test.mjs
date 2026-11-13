@@ -1450,6 +1450,53 @@ test("flow: a credential returned by one server and sent to another is reported"
   assert.match(logText, /\[credential removed\]/);
 });
 
+test("flow: a credential in a resource subscription is reported when another server is asked to watch it", async () => {
+  const box = sandbox([ECHO]);
+  const uri = `file://notes/${FAKE_TOKEN}`;
+  const vault = session(box, [], "vault");
+  try {
+    await vault.listTools();
+    await vault.call("echo", { echo: `your token is ${FAKE_TOKEN}` });
+    const same = await vault.request("resources/subscribe", { uri });
+    assert.deepEqual(same.result, {});
+  } finally {
+    await vault.close();
+  }
+  assert.doesNotMatch(vault.stderr(), /returned \d+ minute/);
+
+  const web = session(box, [], "web");
+  try {
+    await web.listTools();
+    const sub = await web.request("resources/subscribe", { uri });
+    assert.deepEqual(sub.result, {}, "by default a flow is reported, not blocked");
+    const unsub = await web.request("resources/unsubscribe", { uri });
+    assert.deepEqual(unsub.result, {});
+  } finally {
+    await web.close();
+  }
+  assert.match(
+    web.stderr(),
+    /WARNING request to "file:\/\/notes\/\[credential removed\]" on "web" carries a credential that server "vault" returned/,
+  );
+  assert.equal(JSON.stringify(box.audit()).includes(FAKE_TOKEN), false);
+  assert.ok(JSON.stringify(box.serverCalls()).includes(FAKE_TOKEN), "by default the subscription is still delivered");
+
+  const policyFile = join(box.dir, "policy.json");
+  writeFileSync(policyFile, JSON.stringify({ flows: [{ id: "vault-stays-put", from: "vault", to: "*", action: "deny" }] }));
+  const before = box.serverCalls().length;
+  const gated = session(box, ["--policy", policyFile], "web");
+  try {
+    await gated.listTools();
+    const denied = await gated.request("resources/subscribe", { uri });
+    assert.equal(denied.error.code, -32000);
+    assert.match(denied.error.message, /Blocked by toolwarden/);
+    assert.doesNotMatch(denied.error.message, new RegExp(FAKE_TOKEN));
+  } finally {
+    await gated.close();
+  }
+  assert.equal(box.serverCalls().length, before, "a denied subscription never reaches the server");
+});
+
 test("flow: a credential returned by one server and read back through another is reported", async () => {
   const box = sandbox([ECHO]);
   const vault = session(box, [], "vault");
