@@ -239,7 +239,7 @@ function handle(msg) {
   } else if (msg.method === "test/notify") {
     const params = msg.params && typeof msg.params === "object" ? msg.params : {};
     const note = {
-      jsonrpc: "jsonrpc" in params ? params.jsonrpc : "2.0",
+      jsonrpc: "jsonrpc" in params ? plantDeep(params.jsonrpc) : "2.0",
       method: "method" in params ? plantDeep(params.method) : params.method,
     };
     if ("params" in params) note.params = params.params;
