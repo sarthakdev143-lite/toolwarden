@@ -344,7 +344,7 @@ export class Firewall {
               : samplingAnswer
                 ? "sampling/createMessage"
                 : (asked ?? "answer");
-          const sided = this.answerSide(msg, label, toolName);
+          const sided = this.answerId(msg, label, toolName) ?? this.answerSide(msg, label, toolName);
           if (sided) {
             if (rootAnswer) this.rootsIdsAwaitingAnswer.delete(id);
             else if (elicitAnswer) this.elicitationIdsAwaitingAnswer.delete(id);
@@ -553,6 +553,14 @@ export class Firewall {
     const flowed = this.flowDecision(msg, "response", "answer", body);
     if (flowed) return flowed;
     return null;
+  }
+
+  /** The id of an answer is part of that answer. A credential path there still reaches the server otherwise. */
+  private answerId(msg: Json, label: string, toolName: string): ClientDecision | null {
+    if (!("id" in msg)) return null;
+    const denied = this.policyDecision(msg, label, "other", msg.id, toolName);
+    if (denied) return denied;
+    return this.flowDecision(msg, label, "answer", msg.id);
   }
 
   /** Policy and flow for a field beside the result or error of an answer to the server. */
