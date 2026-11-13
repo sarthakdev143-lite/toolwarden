@@ -796,6 +796,48 @@ test("flow: a credential carried outside the arguments object is reported", asyn
   assert.equal(JSON.stringify(box.audit()).includes(FAKE_TOKEN), false);
 });
 
+test("flow: a credential shown in a log or progress update is recognized when another server is asked to send it", async () => {
+  const box = sandbox([ECHO, SEND]);
+  const vault = session(box, ["--results", "off"], "vault");
+  try {
+    await vault.listTools();
+    await vault.request("test/log", { level: "info", data: `your token is ${FAKE_TOKEN}` });
+    await vault.call("send", { body: FAKE_TOKEN });
+  } finally {
+    await vault.close();
+  }
+  assert.doesNotMatch(vault.stderr(), /returned \d+ minute/);
+
+  const web = session(box, [], "web");
+  try {
+    await web.listTools();
+    const res = await web.call("send", { body: `posting ${FAKE_TOKEN}` });
+    assert.equal(res.result.isError, false, "by default a flow is reported, not blocked");
+  } finally {
+    await web.close();
+  }
+  assert.match(web.stderr(), /WARNING call to "send" on "web" carries a credential that server "vault" returned/);
+  assert.equal(JSON.stringify(box.audit()).includes(FAKE_TOKEN), false);
+
+  const progress = sandbox([ECHO, SEND]);
+  const source = session(progress, ["--results", "off"], "vault");
+  try {
+    await source.listTools();
+    await source.request("test/progress", { progressToken: "task", progress: 1, message: `your token is ${FAKE_TOKEN}` });
+  } finally {
+    await source.close();
+  }
+  const other = session(progress, [], "web");
+  try {
+    await other.listTools();
+    await other.call("send", { body: FAKE_TOKEN });
+  } finally {
+    await other.close();
+  }
+  assert.match(other.stderr(), /WARNING call to "send" on "web" carries a credential that server "vault" returned/);
+  assert.equal(JSON.stringify(progress.audit()).includes(FAKE_TOKEN), false);
+});
+
 test("flow: a credential hidden in a base64 blob is recognized when another server is asked to send it", async () => {
   const box = sandbox([ECHO, SEND]);
   const blob = Buffer.from(`your token is ${FAKE_TOKEN}`, "utf8").toString("base64");

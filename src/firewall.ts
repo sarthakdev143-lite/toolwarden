@@ -647,8 +647,9 @@ export class Firewall {
   }
 
   private checkLog(msg: Json): Json | null {
-    if (this.resultMode === "off") return null;
     const params = isObject(msg.params) ? msg.params : {};
+    this.opts.flow?.record(params);
+    if (this.resultMode === "off") return null;
     const findings = scanResult(params);
     if (findings.length === 0) return null;
     const reasons = findings.map((f) => f.message).join("; ");
@@ -680,8 +681,9 @@ export class Firewall {
   }
 
   private checkProgress(msg: Json): Json | null {
-    if (this.resultMode === "off") return null;
     const params = isObject(msg.params) ? msg.params : {};
+    this.opts.flow?.record(params);
+    if (this.resultMode === "off") return null;
     const findings = scanResult(params);
     if (findings.length === 0) return null;
     const reasons = findings.map((f) => f.message).join("; ");
