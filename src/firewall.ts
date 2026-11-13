@@ -714,7 +714,17 @@ export class Firewall {
     return null;
   }
 
+  /** A tool call whose name is not a string is still a call. A credential path there still reaches the server otherwise. */
+  private looseName(msg: Json): ClientDecision | null {
+    if (!isObject(msg.params) || typeof msg.params.name === "string") return null;
+    const denied = this.policyDecision(msg, "tools/call", "other", msg.params);
+    if (denied) return denied;
+    return this.flowDecision(msg, "tools/call", "tool", msg.params);
+  }
+
   private checkCall(msg: Json): ClientDecision {
+    const loose = this.looseName(msg);
+    if (loose) return loose;
     const params = isObject(msg.params) ? msg.params : {};
     const name = params.name;
     if (typeof name !== "string") return { forward: true };

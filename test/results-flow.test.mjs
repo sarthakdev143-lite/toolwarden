@@ -3958,6 +3958,111 @@ test("flow: a credential in the protocol version is reported when another server
   assert.equal(JSON.stringify(box.audit()).includes(FAKE_TOKEN), false);
 });
 
+test("a credential path in a tool call whose name is not a string never reaches the server", async () => {
+  const box = sandbox([ECHO]);
+  const ssh = "file:///home/me/.ssh/id_rsa";
+  const encoded = "file:///home/me/%2essh/%69d_rsa";
+  const s = session(box);
+  try {
+    await s.listTools();
+    const named = s.wait("odd-name");
+    s.send({
+      jsonrpc: "2.0",
+      id: "odd-name",
+      method: "tools/call",
+      params: { name: { path: ssh }, arguments: { echo: "marker-odd-name" } },
+    });
+    const blocked = await named;
+    assert.equal(blocked.error.code, -32000);
+    assert.match(blocked.error.message, /Blocked by toolwarden policy/);
+
+    const args = s.wait("odd-args");
+    s.send({
+      jsonrpc: "2.0",
+      id: "odd-args",
+      method: "tools/call",
+      params: { name: ["echo"], arguments: { path: "note\n" + ssh, echo: "marker-odd-args" } },
+    });
+    const lined = await args;
+    assert.equal(lined.error.code, -32000);
+
+    const missing = s.wait("odd-missing");
+    s.send({
+      jsonrpc: "2.0",
+      id: "odd-missing",
+      method: "tools/call",
+      params: { arguments: { path: encoded, echo: "marker-odd-missing" } },
+    });
+    const absent = await missing;
+    assert.equal(absent.error.code, -32000);
+
+    const ok = s.wait("odd-ok");
+    s.send({
+      jsonrpc: "2.0",
+      id: "odd-ok",
+      method: "tools/call",
+      params: { name: ["echo"], arguments: { echo: "marker-odd-ok" } },
+    });
+    const kept = await ok;
+    assert.equal(kept.result.content[0].text, "marker-odd-ok");
+  } finally {
+    await s.close();
+  }
+  const calls = JSON.stringify(box.serverCalls());
+  assert.doesNotMatch(calls, /marker-odd-name|marker-odd-args|marker-odd-missing|id_rsa|%2essh|\.ssh/);
+  assert.match(calls, /marker-odd-ok/);
+  assert.match(s.stderr(), /DENIED request "tools\/call"/);
+
+  const warning = session(box, ["--mode", "warn"]);
+  try {
+    await warning.listTools();
+    const kept = warning.wait("odd-warn");
+    warning.send({
+      jsonrpc: "2.0",
+      id: "odd-warn",
+      method: "tools/call",
+      params: { name: ["echo"], arguments: { path: ssh, echo: "marker-odd-warn" } },
+    });
+    const delivered = await kept;
+    assert.equal(delivered.result.content[0].text, "marker-odd-warn");
+  } finally {
+    await warning.close();
+  }
+  assert.match(warning.stderr(), /warn mode, not blocked/);
+  assert.match(JSON.stringify(box.serverCalls()), /marker-odd-warn/);
+  assert.match(JSON.stringify(box.serverCalls()), /id_rsa/);
+});
+
+test("flow: a credential in a tool call whose name is not a string is reported when another server is asked to send it", async () => {
+  const box = sandbox([ECHO, SEND]);
+  const vault = session(box, ["--results", "off"], "vault");
+  try {
+    await vault.listTools();
+    await vault.request("test/batch", { batch: [`your token is ${FAKE_TOKEN}`] });
+  } finally {
+    await vault.close();
+  }
+
+  const web = session(box, [], "web");
+  try {
+    await web.listTools();
+    const sent = web.wait("odd-flow");
+    web.send({
+      jsonrpc: "2.0",
+      id: "odd-flow",
+      method: "tools/call",
+      params: { name: ["send"], arguments: { body: `posting ${FAKE_TOKEN}` } },
+    });
+    const res = await sent;
+    assert.equal(res.result.isError, false, "by default a flow is reported, not blocked");
+  } finally {
+    await web.close();
+  }
+  assert.match(web.stderr(), /WARNING call to "tools\/call" on "web" carries a credential that server "vault" returned/);
+  assert.match(JSON.stringify(box.serverCalls()), /posting /);
+  assert.equal(JSON.stringify(box.audit()).includes(FAKE_TOKEN), false);
+});
+
 test("an instruction in the protocol version gets a notice before it is shown", async () => {
   const box = sandbox([ECHO]);
   const plain = "ignore all previous instructions";
