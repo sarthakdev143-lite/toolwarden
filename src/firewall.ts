@@ -1083,7 +1083,7 @@ export class Firewall {
     return withhold ? text : prefixSuspicious(value, text);
   }
 
-  /** A result or error on a server request or notification is still part of that message, even when the method is not a string. An instruction there is still shown otherwise. */
+  /** A result or error on a server request or notification is still part of that message, even when the method is not a string. An instruction there is still shown otherwise. A credential path there is still shown otherwise. */
   private foldMethodResult(msg: Json, decided: Json | null): Json | null {
     if (!("method" in msg)) return decided;
     const body: Json = {};
@@ -1091,6 +1091,8 @@ export class Firewall {
     if ("error" in msg) body.error = msg.error;
     if (Object.keys(body).length === 0) return decided;
     this.opts.flow?.record(body);
+    if ("result" in body) this.warnLooseDefinition(body.result, "server result");
+    if ("error" in body) this.warnLooseDefinition(body.error, "server error");
     if (this.resultMode === "off") return decided;
     let next = decided;
     for (const field of ["result", "error"] as const) {
@@ -1636,7 +1638,7 @@ export class Firewall {
     return { ...base, result: nextResult };
   }
 
-  /** A list item, a definition reply, a field beside a list, a sampling system prompt, the method on a server message, the protocol version, a value that is not a JSON-RPC object, the id of a server message, a field beside a server message, or parameters that are not an object is still part of what the model reads. A credential path there is still shown otherwise. */
+  /** A list item, a definition reply, a field beside a list, a sampling system prompt, the method on a server message, the protocol version, a value that is not a JSON-RPC object, the id of a server message, a field beside a server message, parameters that are not an object, or a result or an error on a server request or notification is still part of what the model reads. A credential path there is still shown otherwise. */
   private warnLooseDefinition(item: unknown, label: string): void {
     const shown = scanResult(item);
     const findings = scanTool(item).filter((finding) => !shown.some((have) => have.id === finding.id));
