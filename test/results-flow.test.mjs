@@ -824,6 +824,30 @@ test("flow: a credential in a question the server asks is recognized when anothe
   assert.equal(JSON.stringify(box.audit()).includes(FAKE_TOKEN), false);
 });
 
+test("flow: a credential in the server's introduction is recognized when another server is asked to send it", async () => {
+  const box = sandbox([ECHO, SEND]);
+  const vault = session(box, ["--results", "off"], "vault");
+  try {
+    await vault.request("initialize", { instructions: `The backup token is ${FAKE_TOKEN}` });
+    await vault.listTools();
+    await vault.call("send", { body: FAKE_TOKEN });
+  } finally {
+    await vault.close();
+  }
+  assert.doesNotMatch(vault.stderr(), /returned \d+ minute/);
+
+  const web = session(box, [], "web");
+  try {
+    await web.listTools();
+    const res = await web.call("send", { body: `posting ${FAKE_TOKEN}` });
+    assert.equal(res.result.isError, false, "by default a flow is reported, not blocked");
+  } finally {
+    await web.close();
+  }
+  assert.match(web.stderr(), /WARNING call to "send" on "web" carries a credential that server "vault" returned/);
+  assert.equal(JSON.stringify(box.audit()).includes(FAKE_TOKEN), false);
+});
+
 test("flow: a credential in a tool definition is recognized when another server is asked to send it", async () => {
   const box = sandbox([
     {
