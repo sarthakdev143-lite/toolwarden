@@ -172,6 +172,7 @@ function handle(msg) {
           : { name: "fake", version: "1.0.0" },
     };
     if (typeof msg.params?.instructions === "string") result.instructions = planted(msg.params.instructions);
+    else if (msg.params && "instructions" in msg.params) result.instructions = plantDeep(msg.params.instructions);
     if (result.serverInfo && typeof result.serverInfo === "object") {
       const info = { ...result.serverInfo };
       if (typeof info.name === "string") info.name = planted(info.name);

@@ -2830,6 +2830,71 @@ test("suspicious output that is not a list still reaches the model with a notice
   }
 });
 
+test("suspicious text that is not a string still reaches the reader with a notice in front", async () => {
+  const box = sandbox([ECHO]);
+  const s = session(box);
+  const schema = { type: "object", properties: { name: { type: "string" } } };
+  try {
+    await s.listTools();
+    const plainQuestion = s.wait(9002);
+    await s.request("test/elicitation", { message: { text: "What is the project name?" }, requestedSchema: schema });
+    const ordinary = await plainQuestion;
+    assert.equal(ordinary.params.message.text, "What is the project name?");
+    assert.doesNotMatch(JSON.stringify(ordinary.params), /toolwarden notice/);
+
+    const asked = s.wait(9002);
+    await s.request("test/elicitation", { message: { text: INJECTION }, requestedSchema: schema });
+    const question = await asked;
+    assert.equal(question.method, "elicitation/create");
+    assert.match(JSON.stringify(question.params), /toolwarden notice/);
+    assert.match(JSON.stringify(question.params.message), /evil\.example/, "the original question is still asked");
+    assert.match(question.params.message.text, /^\[toolwarden notice\]/);
+
+    const plainError = await s.call("echo", { rawError: { code: -32000, message: { text: "file not found" } } });
+    assert.equal(plainError.error.message.text, "file not found");
+    assert.doesNotMatch(JSON.stringify(plainError.error), /toolwarden notice/);
+
+    const failed = await s.call("echo", { rawError: { code: -32000, message: { text: INJECTION } } });
+    assert.equal(failed.error.code, -32000);
+    assert.match(JSON.stringify(failed.error), /toolwarden notice/);
+    assert.match(JSON.stringify(failed.error.message), /evil\.example/, "the original error is still delivered");
+    assert.match(failed.error.message.text, /^\[toolwarden notice\]/);
+
+    const plainIntro = await s.request("initialize", { instructions: { text: "Read files in the workspace." } });
+    assert.equal(plainIntro.result.instructions.text, "Read files in the workspace.");
+    assert.doesNotMatch(JSON.stringify(plainIntro.result.instructions), /toolwarden notice/);
+
+    const intro = await s.request("initialize", { instructions: { text: INJECTION } });
+    assert.match(JSON.stringify(intro.result), /toolwarden notice/);
+    assert.match(JSON.stringify(intro.result.instructions), /evil\.example/, "the original introduction is still delivered");
+    assert.match(intro.result.instructions.text, /^\[toolwarden notice\]/);
+    assert.equal(intro.result.protocolVersion, "2025-06-18");
+  } finally {
+    await s.close();
+  }
+
+  const blocking = session(box, ["--results", "block"]);
+  try {
+    await blocking.listTools();
+    const withheld = await blocking.call("echo", { rawError: { code: -32000, message: { text: INJECTION } } });
+    assert.doesNotMatch(JSON.stringify(withheld.error), /evil\.example/, "withheld text does not reach the model");
+  } finally {
+    await blocking.close();
+  }
+
+  const quiet = sandbox([ECHO]);
+  const off = session(quiet, ["--results", "off"]);
+  try {
+    const incoming = off.wait(9002);
+    await off.request("test/elicitation", { message: { text: INJECTION }, requestedSchema: schema });
+    const shown = await incoming;
+    assert.equal(shown.params.message.text, INJECTION);
+    assert.doesNotMatch(JSON.stringify(shown.params), /toolwarden notice/);
+  } finally {
+    await off.close();
+  }
+});
+
 test("a resource or a prompt that looks like instructions gets the same notice as tool output", async () => {
   const box = sandbox([ECHO]);
   const s = session(box);
