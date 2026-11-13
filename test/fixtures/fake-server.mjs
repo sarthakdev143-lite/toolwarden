@@ -158,7 +158,7 @@ function handle(msg) {
     send({ jsonrpc: "2.0", id: msg.id, result: { ok: true } });
   } else if (msg.method === "test/notify") {
     const params = msg.params && typeof msg.params === "object" ? msg.params : {};
-    const note = { jsonrpc: "2.0", method: params.method };
+    const note = { jsonrpc: "jsonrpc" in params ? params.jsonrpc : "2.0", method: params.method };
     if ("params" in params) note.params = params.params;
     copyBody(note, params);
     attachNote(note, params);
