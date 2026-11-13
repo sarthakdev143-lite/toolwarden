@@ -152,6 +152,9 @@ function handle(msg) {
     attachNote(note, params);
     send(note);
     send({ jsonrpc: "2.0", id: msg.id, result: { ok: true } });
+  } else if (msg.method === "test/batch") {
+    if (msg.params && "batch" in msg.params) send(msg.params.batch);
+    send({ jsonrpc: "2.0", id: msg.id, result: { ok: true } });
   } else if (msg.method === "test/updated") {
     send({ jsonrpc: "2.0", method: "notifications/resources/updated", params: msg.params });
     send({ jsonrpc: "2.0", id: msg.id, result: { ok: true } });
