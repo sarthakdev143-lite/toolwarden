@@ -85,6 +85,9 @@ export function connect(child) {
     call(name, args) {
       return this.request("tools/call", { name, arguments: args });
     },
+    send(msg) {
+      child.stdin.write(JSON.stringify(msg) + "\n");
+    },
     wait(id) {
       return new Promise((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error(`no message ${id} within 5s`)), 5000);

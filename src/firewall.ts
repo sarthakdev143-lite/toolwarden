@@ -178,6 +178,7 @@ export class Firewall {
   private readonly pendingCalls = new Map<string, { label: string; kind: "tool" | "resource" | "prompt" }>();
   private readonly pendingCatalogs = new Map<string, CatalogKind>();
   private readonly pendingInits = new Set<string>();
+  private readonly elicitationIdsAwaitingAnswer = new Set<string>();
   private readonly listedThisCycle = new Set<string>();
   private readonly alerted = new Set<string>();
   private readonly resultMode: ResultMode;
@@ -199,7 +200,16 @@ export class Firewall {
   // ---------------------------------------------------------------- client → server
 
   onClientMessage(msg: unknown, scope = ""): ClientDecision {
-    if (!isObject(msg) || typeof msg.method !== "string") return { forward: true };
+    if (!isObject(msg)) return { forward: true };
+    if (typeof msg.method !== "string") {
+      if ("id" in msg && "result" in msg && this.elicitationIdsAwaitingAnswer.delete(String(msg.id))) {
+        const result = isObject(msg.result) ? msg.result : {};
+        const args = "content" in result ? result.content : result;
+        const flowed = this.flowDecision(msg, "elicitation", "answer", args);
+        if (flowed) return flowed;
+      }
+      return { forward: true };
+    }
 
     if (msg.method === "initialize" && "id" in msg) {
       this.pendingInits.add(idKey(scope, msg.id));
@@ -296,10 +306,15 @@ export class Firewall {
     return { forward: false, reply: { jsonrpc: "2.0", id: msg.id, result: this.placeNotice({}, kind, text, true) } };
   }
 
-  private flowDecision(msg: Json, label: string, kind: "tool" | "resource" | "prompt", args: unknown): ClientDecision | null {
+  private flowDecision(
+    msg: Json,
+    label: string,
+    kind: "tool" | "resource" | "prompt" | "answer",
+    args: unknown,
+  ): ClientDecision | null {
     const { server, audit } = this.opts;
     const blocking = this.opts.mode === "block";
-    const noun = kind === "tool" ? "call" : "request";
+    const noun = kind === "tool" ? "call" : kind === "answer" ? "answer" : "request";
     for (const hit of this.opts.flow?.check(args) ?? []) {
       const what = hit.kind === "secret" ? "a credential" : "a value";
       const reason = `carries ${what} that server "${hit.from}" returned ${minutes(hit.ageMs)} ago`;
@@ -314,6 +329,12 @@ export class Firewall {
         const text =
           `Blocked by toolwarden policy: this ${noun} ${reason}, and the user's policy does not allow ` +
           `data to move from "${hit.from}" to "${server}" (rule "${ruleId}").`;
+        if (kind === "answer") {
+          return {
+            forward: false,
+            reply: { jsonrpc: "2.0", id: msg.id, error: { code: -32000, message: text } },
+          };
+        }
         if (kind === "tool") return { forward: false, reply: this.errorReply(msg, text) };
         if (!("id" in msg)) return { forward: false };
         return { forward: false, reply: { jsonrpc: "2.0", id: msg.id, result: this.placeNotice({}, kind, text, true) } };
@@ -440,7 +461,10 @@ export class Firewall {
   onServerMessage(msg: unknown, scope = ""): Json | null {
     if (!isObject(msg)) return null;
     if (msg.method === "sampling/createMessage" && "id" in msg) return this.checkSampling(msg);
-    if (msg.method === "elicitation/create" && "id" in msg) return this.checkElicit(msg);
+    if (msg.method === "elicitation/create" && "id" in msg) {
+      this.elicitationIdsAwaitingAnswer.add(String(msg.id));
+      return this.checkElicit(msg);
+    }
     if ("method" in msg || !("id" in msg)) return null;
     const key = idKey(scope, msg.id);
 
