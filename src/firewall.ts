@@ -1249,10 +1249,11 @@ export class Firewall {
     return next;
   }
 
-  /** The method is part of the server message, even when it is not a string. An instruction there is still shown otherwise, and a credential there is still forgotten otherwise. */
+  /** The method is part of the server message, even when it is not a string. An instruction there is still shown otherwise, and a credential there is still forgotten otherwise. A credential path there is still shown otherwise. */
   private foldMethod(msg: Json, decided: Json | null): Json | null {
     if (!("method" in msg)) return decided;
     this.opts.flow?.record(msg.method);
+    this.warnLooseDefinition(msg.method, "method");
     if (this.resultMode === "off") return decided;
     const findings = scanResult(msg.method);
     if (findings.length === 0) return decided;
@@ -1630,7 +1631,7 @@ export class Firewall {
     return { ...base, result: nextResult };
   }
 
-  /** A list item, a definition reply, a field beside a list, or a sampling system prompt is still part of what the model reads. A credential path there is still shown otherwise. */
+  /** A list item, a definition reply, a field beside a list, a sampling system prompt, or the method on a server message is still part of what the model reads. A credential path there is still shown otherwise. */
   private warnLooseDefinition(item: unknown, label: string): void {
     const shown = scanResult(item);
     const findings = scanTool(item).filter((finding) => !shown.some((have) => have.id === finding.id));
