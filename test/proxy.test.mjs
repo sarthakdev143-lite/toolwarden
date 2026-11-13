@@ -384,7 +384,7 @@ test("the proxy passes other traffic through untouched and exits with the server
   const s = session(box);
   const init = await s.request("initialize", {});
   assert.equal(init.result.serverInfo.name, "fake");
-  const unknown = await s.request("resources/list", {});
+  const unknown = await s.request("ping", {});
   assert.equal(unknown.error.code, -32601);
   const code = await s.close();
   assert.equal(code, 0);

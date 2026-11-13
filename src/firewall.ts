@@ -71,6 +71,7 @@ export class Firewall {
   private readonly pendingLists = new Set<string>();
   private readonly listCursors = new Map<string, string | null>();
   private readonly pendingCalls = new Map<string, { label: string; kind: "tool" | "resource" | "prompt" }>();
+  private readonly pendingCatalogs = new Map<string, "resource" | "prompt">();
   private readonly listedThisCycle = new Set<string>();
   private readonly alerted = new Set<string>();
   private readonly resultMode: ResultMode;
@@ -100,6 +101,11 @@ export class Firewall {
       const params = isObject(msg.params) ? msg.params : {};
       const cursor = typeof params.cursor === "string" && params.cursor !== "" ? params.cursor : null;
       this.listCursors.set(key, cursor);
+      return { forward: true };
+    }
+
+    if ((msg.method === "resources/list" || msg.method === "prompts/list") && "id" in msg) {
+      this.pendingCatalogs.set(idKey(scope, msg.id), msg.method === "resources/list" ? "resource" : "prompt");
       return { forward: true };
     }
 
@@ -331,12 +337,51 @@ export class Firewall {
       return { ...msg, result: { ...result, tools: kept } };
     }
 
+    const catalog = this.pendingCatalogs.get(key);
+    if (catalog !== undefined) {
+      this.pendingCatalogs.delete(key);
+      if (isObject(msg.result)) this.checkCatalog(msg.result, catalog);
+      return null;
+    }
+
     const pending = this.pendingCalls.get(key);
     if (pending !== undefined) {
       this.pendingCalls.delete(key);
       if (isObject(msg.result)) return this.checkResult(msg, msg.result, pending.label, pending.kind);
     }
     return null;
+  }
+
+  private checkCatalog(result: Json, kind: "resource" | "prompt"): void {
+    const items = kind === "resource" ? result.resources : result.prompts;
+    if (!Array.isArray(items)) return;
+    const { server, audit } = this.opts;
+    for (const item of items) {
+      if (!isObject(item)) continue;
+      const raw =
+        kind === "resource"
+          ? typeof item.uri === "string" && item.uri !== ""
+            ? item.uri
+            : "resource"
+          : typeof item.name === "string" && item.name !== ""
+            ? item.name
+            : "prompt";
+      const label = visibleLabel(raw);
+      const findings = scanResult(item);
+      if (findings.length === 0) continue;
+      const hash = hashTool(item);
+      for (const f of findings) {
+        const alertKey = kind + ":" + label + ":" + hash + ":" + f.id;
+        if (this.alerted.has(alertKey)) continue;
+        this.alerted.add(alertKey);
+        audit.alert(`WARNING: the ${kind} "${label}" on "${server}" ${f.message}. Read it before trusting it.`, {
+          event: "definition_warning",
+          tool: label,
+          check: f.id,
+          reason: f.message,
+        });
+      }
+    }
   }
 
   private checkResult(msg: Json, result: Json, label: string, kind: "tool" | "resource" | "prompt"): Json | null {
