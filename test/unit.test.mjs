@@ -37,6 +37,24 @@ test("scan flags hidden instructions and leaves normal descriptions alone", () =
   );
 });
 
+test("default policy catches a credential path hidden by compatibility or invisible characters", () => {
+  const policy = new Policy(DEFAULT_RULES);
+  const dot = "\uFF0E";
+  const slash = "\uFF0F";
+  assert.equal(policy.evaluate("run", { path: `/home/me/${dot}ssh/config` }).denied?.ruleId, "ssh-keys");
+  assert.equal(policy.evaluate("run", { path: `/home/me${slash}.ssh/config` }).denied?.ruleId, "ssh-keys");
+  assert.equal(policy.evaluate("run", { path: "/home/me/.\u200Bssh/config" }).denied?.ruleId, "ssh-keys");
+  assert.equal(
+    policy.evaluate("run", { path: `/home/me/${encodeURIComponent(dot)}ssh/config` }).denied?.ruleId,
+    "ssh-keys",
+  );
+  assert.equal(policy.evaluate("run", { [`/home/me/${dot}ssh/config`]: "read" }).denied?.ruleId, "ssh-keys");
+  assert.equal(policy.evaluate("run", { file: `\uFF49\uFF44_rsa` }).denied?.ruleId, "ssh-keys");
+  assert.equal(policy.evaluate("run", { path: `notes${dot}ssh` }).denied, null);
+  assert.equal(policy.evaluate("run", { path: `/home/me${slash}.sshconfig` }).denied, null);
+  assert.equal(policy.evaluate("run", { path: "café menu" }).denied, null);
+});
+
 test("default policy catches credential paths in nested arguments", () => {
   const policy = new Policy(DEFAULT_RULES);
   assert.equal(policy.evaluate("run", { cmd: ["cat", "/root/.ssh/authorized_keys"] }).denied?.ruleId, "ssh-keys");

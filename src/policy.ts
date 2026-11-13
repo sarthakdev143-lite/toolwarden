@@ -1,12 +1,12 @@
 import { existsSync, readFileSync } from "node:fs";
-import { includePercentDecoded } from "./percent.js";
-import { collectText } from "./scan.js";
+import { percentDecoded } from "./percent.js";
+import { collectText, comparableText } from "./scan.js";
 
 export interface Rule {
   id: string;
   /** Glob over the tool name. "*" matches anything. Defaults to "*". */
   tool?: string;
-  /** Regular expression (case-insensitive) tested against every string in the call, other than a tool call's name, including object keys and text stored in a base64 blob or in image and audio data. */
+  /** Regular expression (case-insensitive) tested against every string in the call, other than a tool call's name, including object keys and text stored in a base64 blob or in image and audio data. Percent-encoding, compatibility characters, and invisible characters are folded before the test. */
   pattern: string;
   /** "deny" blocks the call. "warn" lets it through and records a warning. Defaults to "deny". */
   action?: "deny" | "warn";
@@ -110,6 +110,40 @@ interface CompiledRule {
   pattern: RegExp;
 }
 
+function hasNonAscii(value: string): boolean {
+  for (let i = 0; i < value.length; i++) {
+    if (value.charCodeAt(i) > 127) return true;
+  }
+  return false;
+}
+
+/**
+ * The string itself, plus the same string with percent-encoding undone and with
+ * compatibility characters and invisible characters folded. Each result is
+ * folded again, so a path cannot hide behind one layer of either disguise.
+ */
+function matchForms(value: string): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const add = (s: string) => {
+    if (seen.has(s)) return;
+    seen.add(s);
+    out.push(s);
+  };
+  add(value);
+  for (let i = 0; i < out.length && i < 8; i++) {
+    const s = out[i];
+    if (s === undefined) continue;
+    const decoded = percentDecoded(s);
+    if (decoded !== null) add(decoded);
+    if (hasNonAscii(s)) {
+      const folded = comparableText(s);
+      if (folded !== s) add(folded);
+    }
+  }
+  return out;
+}
+
 function globToRegExp(glob: string): RegExp {
   const escaped = glob.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
   return new RegExp("^" + escaped + "$");
@@ -166,7 +200,7 @@ export class Policy {
   }
 
   evaluate(toolName: string, args: unknown): Verdict {
-    const candidates = includePercentDecoded(collectText(args));
+    const candidates = collectText(args).flatMap(matchForms);
     const verdict: Verdict = { denied: null, warnings: [] };
     for (const c of this.compiled) {
       if (!c.tool.test(toolName)) continue;

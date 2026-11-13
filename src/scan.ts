@@ -15,10 +15,19 @@ interface Check {
   message: string;
 }
 
+/** Characters that can hide or reorder text. The zero-width joiner is not included, so emoji sequences stay intact. */
+const INVISIBLE_SOURCE =
+  "[\\u200B\\u200C\\u200E\\u200F\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u2069\\uFEFF]|[\\u{E0000}-\\u{E007F}]";
+
+/** Fold compatibility characters and drop invisible characters, so a lookalike path can be matched. */
+export function comparableText(value: string): string {
+  return value.normalize("NFKC").replace(new RegExp(INVISIBLE_SOURCE, "gu"), "");
+}
+
 const CHECKS: Check[] = [
   {
     id: "invisible-characters",
-    pattern: /[\u200B\u200C\u200E\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]|[\u{E0000}-\u{E007F}]/u,
+    pattern: new RegExp(INVISIBLE_SOURCE, "u"),
     message: "contains invisible or text-direction characters, which can hide instructions from a human reviewer",
   },
   {
