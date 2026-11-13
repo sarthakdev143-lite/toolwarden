@@ -1638,7 +1638,7 @@ export class Firewall {
     return { ...base, result: nextResult };
   }
 
-  /** A list item, a definition reply, a field beside a list, a sampling system prompt, the method on a server message, the protocol version, a value that is not a JSON-RPC object, the id of a server message, a field beside a server message, parameters that are not an object, a result or an error on a server request or notification, or a progress token is still part of what the model reads. A credential path there is still shown otherwise. */
+  /** A list item, a definition reply, a field beside a list, a sampling system prompt, the method on a server message, the protocol version, a value that is not a JSON-RPC object, the id of a server message, a field beside a server message, parameters that are not an object, a result or an error on a server request or notification, a progress token, or an elicitation question is still part of what the model reads. A credential path there is still shown otherwise. */
   private warnLooseDefinition(item: unknown, label: string): void {
     const shown = scanResult(item);
     const findings = scanTool(item).filter((finding) => !shown.some((have) => have.id === finding.id));
@@ -1956,9 +1956,11 @@ export class Firewall {
     return { ...msg, params: withhold ? withholdNotice(params, text) : annotateNotice(params, text) };
   }
 
+  /** The question is what the server asks the user to answer. An instruction there is still shown otherwise. A credential path there is still shown otherwise. */
   private checkElicit(msg: Json): Json | null {
     const params = isObject(msg.params) ? msg.params : {};
     this.opts.flow?.record(params);
+    this.warnLooseDefinition(params, "elicitation question");
     if (this.resultMode === "off") return null;
     const findings = scanResult(params);
     if (findings.length === 0) return null;
