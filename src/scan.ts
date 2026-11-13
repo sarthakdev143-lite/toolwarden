@@ -59,6 +59,13 @@ function decodedBlob(value: string): string | null {
   return text;
 }
 
+/** Includes text stored in a base64 blob. */
+export function collectText(value: unknown): string[] {
+  const out: string[] = [];
+  collectStrings(value, out);
+  return out;
+}
+
 function collectStrings(value: unknown, out: string[]): void {
   if (typeof value === "string") {
     out.push(value);
@@ -101,9 +108,7 @@ export interface Finding {
 
 /** Scan every string in a tool definition (description, schema descriptions, defaults, enums). */
 export function scanTool(tool: unknown): Finding[] {
-  const strings: string[] = [];
-  collectStrings(tool, strings);
-  const text = includePercentDecoded(strings).join("\n");
+  const text = includePercentDecoded(collectText(tool)).join("\n");
   const findings: Finding[] = [];
   for (const check of CHECKS) {
     if (check.pattern.test(text)) findings.push({ id: check.id, message: check.message });
@@ -147,9 +152,7 @@ const RESULT_CHECKS: Check[] = [
 
 /** Scan the text a tool returned for instructions aimed at the model. */
 export function scanResult(result: unknown): Finding[] {
-  const strings: string[] = [];
-  collectStrings(result, strings);
-  const text = includePercentDecoded(strings).join("\n").slice(0, 2_000_000);
+  const text = includePercentDecoded(collectText(result)).join("\n").slice(0, 2_000_000);
   const findings: Finding[] = [];
   for (const check of RESULT_CHECKS) {
     if (check.pattern.test(text)) findings.push({ id: check.id, message: check.message });

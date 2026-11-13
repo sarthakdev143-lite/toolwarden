@@ -555,6 +555,10 @@ test("fingerprints: secrets and long ids are found, plain words are not", () => 
   assert.deepEqual(extractFingerprints({ text: "hello world" }), { secrets: [], values: [] });
   const encoded = FAKE_TOKEN.replace("a", "%61");
   assert.deepEqual(extractFingerprints(encoded).secrets, extractFingerprints(FAKE_TOKEN).secrets);
+  const blob = Buffer.from(`your token is ${FAKE_TOKEN}`, "utf8").toString("base64");
+  assert.deepEqual(extractFingerprints({ contents: [{ blob }] }).secrets, extractFingerprints(FAKE_TOKEN).secrets);
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).toString("base64");
+  assert.deepEqual(extractFingerprints({ contents: [{ blob: png }] }), { secrets: [], values: [] });
 });
 
 test("an encoded credential is removed from the log, and ordinary encoding is kept", () => {
@@ -591,6 +595,31 @@ test("flow: a credential carried outside the arguments object is reported", asyn
   }
   assert.match(web.stderr(), /WARNING call to "send" on "web" carries a credential that server "vault" returned/);
   assert.equal(JSON.stringify(box.audit()).includes(FAKE_TOKEN), false);
+});
+
+test("flow: a credential hidden in a base64 blob is recognized when another server is asked to send it", async () => {
+  const box = sandbox([ECHO, SEND]);
+  const blob = Buffer.from(`your token is ${FAKE_TOKEN}`, "utf8").toString("base64");
+  const vault = session(box, [], "vault");
+  try {
+    await vault.listTools();
+    await vault.call("echo", { blob });
+  } finally {
+    await vault.close();
+  }
+
+  const web = session(box, [], "web");
+  try {
+    await web.listTools();
+    const res = await web.call("send", { body: `posting ${FAKE_TOKEN}` });
+    assert.equal(res.result.isError, false, "by default a flow is reported, not blocked");
+  } finally {
+    await web.close();
+  }
+
+  assert.match(web.stderr(), /WARNING call to "send" on "web" carries a credential that server "vault" returned/);
+  const logText = JSON.stringify(box.audit());
+  assert.ok(!logText.includes(FAKE_TOKEN), "the audit log never stores the credential itself");
 });
 
 test("flow: a credential returned by one server and sent to another is reported", async () => {

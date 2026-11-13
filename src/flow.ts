@@ -3,6 +3,7 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statS
 import { join } from "node:path";
 import { includePercentDecoded } from "./percent.js";
 import { slug } from "./pins.js";
+import { collectText } from "./scan.js";
 
 /**
  * Cross-server data tracking.
@@ -46,21 +47,9 @@ function fingerprint(token: string): string {
   return createHash("sha256").update(token).digest("hex").slice(0, 16);
 }
 
-function collectStrings(value: unknown, out: string[]): void {
-  if (typeof value === "string") {
-    out.push(value);
-  } else if (Array.isArray(value)) {
-    for (const v of value) collectStrings(v, out);
-  } else if (value !== null && typeof value === "object") {
-    for (const v of Object.values(value as Record<string, unknown>)) collectStrings(v, out);
-  }
-}
-
 /** Extract fingerprints of secret-shaped strings and of long mixed tokens. */
 export function extractFingerprints(value: unknown): { secrets: string[]; values: string[] } {
-  const strings: string[] = [];
-  collectStrings(value, strings);
-  const text = includePercentDecoded(strings).join("\n").slice(0, MAX_SCAN_CHARS);
+  const text = includePercentDecoded(collectText(value)).join("\n").slice(0, MAX_SCAN_CHARS);
 
   const secrets = new Set<string>();
   for (const pattern of SECRET_PATTERNS) {
