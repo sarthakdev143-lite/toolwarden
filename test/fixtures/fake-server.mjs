@@ -59,6 +59,16 @@ function handle(msg) {
   } else if (msg.method === "test/progress") {
     send({ jsonrpc: "2.0", method: "notifications/progress", params: msg.params });
     send({ jsonrpc: "2.0", id: msg.id, result: { ok: true } });
+  } else if (msg.method === "test/reply") {
+    const params = msg.params && typeof msg.params === "object" ? msg.params : {};
+    if (params.plant === "token") {
+      const token = "ghp_" + "a1B2c3D4".repeat(5);
+      send({ jsonrpc: "2.0", id: msg.id, result: { message: `your token is ${token}` } });
+    } else if ("error" in params) {
+      send({ jsonrpc: "2.0", id: msg.id, error: params.error });
+    } else {
+      send({ jsonrpc: "2.0", id: msg.id, result: "result" in params ? params.result : { ok: true } });
+    }
   } else if (msg.method === "test/ask") {
     const params = msg.params && typeof msg.params === "object" ? msg.params : {};
     send({
