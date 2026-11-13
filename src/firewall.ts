@@ -1010,16 +1010,39 @@ export class Firewall {
    */
   onServerMessage(msg: unknown, scope = ""): unknown {
     if (!isObject(msg)) return this.foldBare(msg);
-    return this.foldVersion(
+    return this.foldId(
       msg,
-      this.foldMethod(
+      this.foldVersion(
         msg,
-        this.foldLooseParams(
+        this.foldMethod(
           msg,
-          this.foldLooseReply(msg, this.foldMethodResult(msg, this.foldServerSide(msg, this.routeServerMessage(msg, scope)))),
+          this.foldLooseParams(
+            msg,
+            this.foldLooseReply(msg, this.foldMethodResult(msg, this.foldServerSide(msg, this.routeServerMessage(msg, scope)))),
+          ),
         ),
       ),
     );
+  }
+
+  /** The id is how the client matches its answer, so it is left unchanged. An instruction there is still shown otherwise, and a credential there is still forgotten otherwise. */
+  private foldId(msg: Json, decided: Json | null): Json | null {
+    if (!("id" in msg)) return decided;
+    this.opts.flow?.record(msg.id);
+    if (this.resultMode === "off") return decided;
+    const findings = scanResult(msg.id);
+    if (findings.length === 0) return decided;
+    const reasons = findings.map((f) => f.message).join("; ");
+    const checks = findings.map((f) => f.id);
+    const { server, audit } = this.opts;
+    const noun = "method" in msg ? "request" : "reply";
+    audit.alert(`WARNING: server ${noun} id on "${server}" ${reasons}.`, {
+      event: "result_warning",
+      tool: "id",
+      checks,
+      reason: reasons,
+    });
+    return decided;
   }
 
   /** A value that is not a JSON-RPC object is still part of what the server sent. An instruction there is still shown otherwise, and a credential there is still forgotten otherwise. */
