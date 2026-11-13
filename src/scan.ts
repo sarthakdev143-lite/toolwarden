@@ -115,7 +115,7 @@ function encodedText(key: string, value: unknown): string | null {
   return decodedBlob(value);
 }
 
-/** Includes text stored in a base64 blob (URL-safe, unpadded, or written with a compatibility or invisible character), including when that blob is a list or an object, including an object in that list and an object inside that object, and an object inside that blob object, including an object inside that one, in image and audio data, including when that data is a list or an object, including an object in that list and an object inside that object, and an object inside that data object, and in object keys. */
+/** Includes text stored in a base64 blob (URL-safe, unpadded, or written with a compatibility or invisible character), including when that blob is a list or an object, including an object in that list and an object inside that object, and an object inside that blob object, including an object inside that one, in image and audio data, including when that data is a list or an object, including an object in that list and an object inside that object, and an object inside that data object, including an object inside that one, and in object keys. */
 export function collectText(value: unknown): string[] {
   const out: string[] = [];
   collectStrings(value, out, false);
@@ -145,7 +145,7 @@ function collectStrings(value: unknown, out: string[], decode: boolean, decodeIt
       const inDecodedObject = (key === "data" || key === "blob") && objectValue;
       const nestedObject = decodeNested && objectValue;
       const child = key === "data" || key === "blob" || ((decode || decodeNested) && typeof v === "string") || nestedObject;
-      collectStrings(v, out, child, inDecodedList, inDecodedList || inDecodedObject || (extra && nestedObject), key === "blob" && objectValue);
+      collectStrings(v, out, child, inDecodedList, inDecodedList || inDecodedObject || (extra && nestedObject), inDecodedObject);
       out.push(key);
     }
   }
