@@ -72,6 +72,15 @@ function annotateIntro(result: Json, text: string): Json {
   return { ...result, instructions };
 }
 
+function prefixSuspicious(value: unknown, notice: string): unknown {
+  if (typeof value === "string") return scanResult(value).length > 0 ? notice + "\n\n" + value : value;
+  if (Array.isArray(value)) return value.map((item) => prefixSuspicious(item, notice));
+  if (isObject(value)) {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, prefixSuspicious(v, notice)]));
+  }
+  return value;
+}
+
 function scrubSuspicious(value: unknown): unknown {
   if (typeof value === "string") return scanResult(value).length > 0 ? "withheld" : value;
   if (Array.isArray(value)) return value.map(scrubSuspicious);
@@ -606,7 +615,9 @@ export class Firewall {
     }
     if (withhold) return { content: [{ type: "text", text }], isError: true };
     const content = Array.isArray(result.content) ? result.content : [];
-    return { ...result, content: [{ type: "text", text }, ...content] };
+    const next: Json = { ...result, content: [{ type: "text", text }, ...content] };
+    if ("structuredContent" in result) next.structuredContent = prefixSuspicious(result.structuredContent, text);
+    return next;
   }
 
   private endTrust(): boolean {

@@ -83,12 +83,14 @@ function handle(msg) {
       send({ jsonrpc: "2.0", id: msg.id, error: { code: -32000, message: msg.params.arguments.fail } });
       return;
     }
-    send({
-      jsonrpc: "2.0",
-      id: msg.id,
-      // A test can choose the tool's output by passing an "echo" argument.
-      result: { content: [{ type: "text", text: msg.params.arguments?.echo ?? "ran " + msg.params.name }], isError: false },
-    });
+    const result = {
+      content: [{ type: "text", text: msg.params.arguments?.echo ?? "ran " + msg.params.name }],
+      isError: false,
+    };
+    if (msg.params?.arguments?.structured && typeof msg.params.arguments.structured === "object") {
+      result.structuredContent = msg.params.arguments.structured;
+    }
+    send({ jsonrpc: "2.0", id: msg.id, result });
   } else if (msg.id !== undefined) {
     send({ jsonrpc: "2.0", id: msg.id, error: { code: -32601, message: "Method not found" } });
   }
