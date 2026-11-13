@@ -94,6 +94,24 @@ function handle(msg) {
       send({ jsonrpc: "2.0", id: msg.id, error });
       return;
     }
+    if (typeof msg.params?.arguments?.image === "string" || typeof msg.params?.arguments?.audio === "string") {
+      const audio = typeof msg.params.arguments.audio === "string";
+      send({
+        jsonrpc: "2.0",
+        id: msg.id,
+        result: {
+          content: [
+            {
+              type: audio ? "audio" : "image",
+              mimeType: audio ? "audio/wav" : "image/png",
+              data: audio ? msg.params.arguments.audio : msg.params.arguments.image,
+            },
+          ],
+          isError: false,
+        },
+      });
+      return;
+    }
     if (typeof msg.params?.arguments?.blob === "string") {
       send({
         jsonrpc: "2.0",
