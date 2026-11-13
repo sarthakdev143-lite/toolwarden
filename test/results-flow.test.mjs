@@ -2689,6 +2689,73 @@ test("a credential path in a second answer is denied when its id only looks like
   assert.match(s.stderr(), /DENIED request "sampling"/);
 });
 
+test("a credential path in a response that is not the outstanding answer never reaches the server", async () => {
+  const box = sandbox([ECHO]);
+  const ssh = "file:///home/me/.ssh/id_rsa";
+  const encoded = "file:///home/me/%2essh/%69d_rsa";
+  const prompt = { messages: [{ role: "user", content: { type: "text", text: "Name yourself." } }] };
+  const s = session(box);
+  try {
+    await s.listTools();
+    const incoming = s.wait(9001);
+    await s.request("test/sampling", prompt);
+    const question = await incoming;
+    assert.equal(question.id, 9001);
+    assert.equal(question.method, "sampling/createMessage");
+
+    const sameDigits = s.wait("9001");
+    s.send({
+      jsonrpc: "2.0",
+      id: "9001",
+      result: { role: "assistant", content: { type: "text", text: ssh }, model: "test" },
+    });
+    const first = await sameDigits;
+    assert.equal(first.error.code, -32000);
+    assert.match(first.error.message, /Blocked by toolwarden policy/);
+
+    const other = s.wait("other");
+    s.send({
+      jsonrpc: "2.0",
+      id: "other",
+      result: { role: "assistant", content: { type: "text", text: encoded }, model: "test" },
+    });
+    const second = await other;
+    assert.equal(second.error.code, -32000);
+    assert.match(second.error.message, /Blocked by toolwarden policy/);
+
+    s.send({
+      jsonrpc: "2.0",
+      id: 9001,
+      result: { role: "assistant", content: { type: "text", text: "Ada" }, model: "test" },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  } finally {
+    await s.close();
+  }
+  const calls = JSON.stringify(box.serverCalls());
+  assert.match(calls, /Ada/);
+  assert.doesNotMatch(calls, /id_rsa|%2essh|\.ssh/);
+  assert.match(s.stderr(), /DENIED request "response"/);
+
+  const warning = session(box, ["--mode", "warn"]);
+  try {
+    await warning.listTools();
+    const asked = warning.wait(9001);
+    await warning.request("test/sampling", prompt);
+    await asked;
+    warning.send({
+      jsonrpc: "2.0",
+      id: "other",
+      result: { role: "assistant", content: { type: "text", text: ssh }, model: "test" },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  } finally {
+    await warning.close();
+  }
+  assert.match(warning.stderr(), /warn mode, not blocked/);
+  assert.match(JSON.stringify(box.serverCalls()), /id_rsa/);
+});
+
 test("a credential path in an answer to the server never reaches it", async () => {
   const box = sandbox([ECHO]);
   const question = { message: "What should I call you?" };
