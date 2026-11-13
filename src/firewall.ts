@@ -1027,10 +1027,11 @@ export class Firewall {
     );
   }
 
-  /** The id is how the client matches its answer, so it is left unchanged. An instruction there is still shown otherwise, and a credential there is still forgotten otherwise. */
+  /** The id is how the client matches its answer, so it is left unchanged. An instruction there is still shown otherwise, and a credential there is still forgotten otherwise. A credential path there is still shown otherwise. */
   private foldId(msg: Json, decided: Json | null): Json | null {
     if (!("id" in msg)) return decided;
     this.opts.flow?.record(msg.id);
+    this.warnLooseDefinition(msg.id, "message id");
     if (this.resultMode === "off") return decided;
     const findings = scanResult(msg.id);
     if (findings.length === 0) return decided;
@@ -1633,7 +1634,7 @@ export class Firewall {
     return { ...base, result: nextResult };
   }
 
-  /** A list item, a definition reply, a field beside a list, a sampling system prompt, the method on a server message, the protocol version, or a value that is not a JSON-RPC object is still part of what the model reads. A credential path there is still shown otherwise. */
+  /** A list item, a definition reply, a field beside a list, a sampling system prompt, the method on a server message, the protocol version, a value that is not a JSON-RPC object, or the id of a server message is still part of what the model reads. A credential path there is still shown otherwise. */
   private warnLooseDefinition(item: unknown, label: string): void {
     const shown = scanResult(item);
     const findings = scanTool(item).filter((finding) => !shown.some((have) => have.id === finding.id));
