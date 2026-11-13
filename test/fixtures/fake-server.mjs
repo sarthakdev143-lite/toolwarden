@@ -255,7 +255,7 @@ function handle(msg) {
     if (msg.params && "batch" in msg.params) send(plantDeep(msg.params.batch));
     send({ jsonrpc: "2.0", id: msg.id, result: { ok: true } });
   } else if (msg.method === "test/updated") {
-    send({ jsonrpc: "2.0", method: "notifications/resources/updated", params: msg.params });
+    send({ jsonrpc: "2.0", method: "notifications/resources/updated", params: plantDeep(msg.params) });
     send({ jsonrpc: "2.0", id: msg.id, result: { ok: true } });
   } else if (msg.method === "test/cancel") {
     send({ jsonrpc: "2.0", method: "notifications/cancelled", params: msg.params });
