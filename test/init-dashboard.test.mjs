@@ -78,6 +78,23 @@ test("init gives the same name different toolwarden names when the commands diff
   assert.notEqual(nameOf(cfg.projects.p.mcpServers.search), "search");
 });
 
+test("init separates server names that would otherwise become the same file", () => {
+  const dir = mkdtempSync(join(tmpdir(), "toolwarden-init-"));
+  const file = join(dir, "mcp.json");
+  const long = "a".repeat(81);
+  writeFileSync(
+    file,
+    JSON.stringify({
+      mcpServers: { ["a".repeat(80)]: { command: "npx", args: ["search-a"] } },
+      projects: { p: { mcpServers: { [long]: { command: "npx", args: ["search-b"] } } } },
+    }),
+  );
+  runCli(["init", "--config", file, "--yes"]);
+  const cfg = JSON.parse(readFileSync(file, "utf8"));
+  const nameOf = (entry) => entry.args[entry.args.indexOf("--name") + 1];
+  assert.notEqual(nameOf(cfg.mcpServers["a".repeat(80)]), nameOf(cfg.projects.p.mcpServers[long]));
+});
+
 test("init finds known client configs, and a wrapped server really runs behind the firewall", async () => {
   const home = mkdtempSync(join(tmpdir(), "toolwarden-home-"));
   mkdirSync(join(home, ".cursor"));

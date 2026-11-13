@@ -2502,6 +2502,29 @@ test("flow: a credential hidden in a base64 blob is recognized when another serv
   assert.ok(!logText.includes(FAKE_TOKEN), "the audit log never stores the credential itself");
 });
 
+test("flow: a credential is still reported when the other server's name would share its file", async () => {
+  const box = sandbox([ECHO, SEND]);
+  const vault = session(box, [], "vault");
+  try {
+    await vault.listTools();
+    await vault.call("echo", { echo: `your token is ${FAKE_TOKEN}` });
+  } finally {
+    await vault.close();
+  }
+
+  const other = session(box, [], "vault!");
+  try {
+    await other.listTools();
+    const res = await other.call("send", { body: `posting ${FAKE_TOKEN}` });
+    assert.equal(res.result.isError, false, "by default a flow is reported, not blocked");
+  } finally {
+    await other.close();
+  }
+
+  assert.match(other.stderr(), /WARNING call to "send" on ".+" carries a credential that server "vault" returned/);
+  assert.doesNotMatch(other.stderr(), /on "vault" carries a credential that server "vault" returned/);
+});
+
 test("a credential path beside an answer never reaches the server", async () => {
   const box = sandbox([ECHO]);
   const question = { message: "What should I call you?" };

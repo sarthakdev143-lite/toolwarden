@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { canonicalize, hashTool } from "../dist/canonical.js";
+import { slug } from "../dist/pins.js";
 import { Policy, DEFAULT_RULES } from "../dist/policy.js";
 import { scanResult, scanTool } from "../dist/scan.js";
 
@@ -10,6 +11,18 @@ test("hashing ignores key order but not content", () => {
   assert.equal(hashTool(a), hashTool(b));
   assert.notEqual(hashTool(a), hashTool({ ...a, description: "d " }));
   assert.equal(canonicalize({ b: 1, a: [2, { d: 1, c: 2 }] }), '{"a":[2,{"c":2,"d":1}],"b":1}');
+});
+
+test("server names that are not safe file names stay distinct", () => {
+  assert.equal(slug("vault"), "vault");
+  assert.equal(slug("my-server"), "my-server");
+  assert.equal(slug(""), "server");
+  assert.notEqual(slug("vault!"), "vault");
+  assert.notEqual(slug("vault!"), slug("vault?"));
+  assert.notEqual(slug("a".repeat(80)), slug("a".repeat(81)));
+  assert.notEqual(slug("!!!"), "server");
+  assert.ok(slug("vault!").length <= 80);
+  assert.ok(slug("a".repeat(200)).length <= 80);
 });
 
 test("scan flags hidden instructions and leaves normal descriptions alone", () => {

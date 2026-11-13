@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, writeFileSync, existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
@@ -23,10 +24,19 @@ export interface PinFile {
   pending: Record<string, PendingEntry>;
 }
 
-/** Make a server name safe to use as a file name. */
+/**
+ * Make a server name safe to use as a file name.
+ * A name that is already safe is kept, so existing pin files stay put.
+ * Any other name keeps a readable prefix plus a hash of the exact name, so
+ * two different names cannot share a pin file or a flow file.
+ */
 export function slug(name: string): string {
-  const s = name.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
-  return s.length > 0 ? s.slice(0, 80) : "server";
+  if (name.length === 0) return "server";
+  const cleaned = name.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
+  const readable = (cleaned.length > 0 ? cleaned : "server").slice(0, 80);
+  if (readable === name) return readable;
+  const hash = createHash("sha256").update(name).digest("hex").slice(0, 8);
+  return `${readable.slice(0, 71)}-${hash}`;
 }
 
 function pinsDir(stateDir: string): string {
