@@ -65,7 +65,7 @@ function encodedText(key: string, value: unknown): string | null {
   return decodedBlob(value);
 }
 
-/** Includes text stored in a base64 blob or in image and audio data. */
+/** Includes text stored in a base64 blob, in image and audio data, and in object keys. */
 export function collectText(value: unknown): string[] {
   const out: string[] = [];
   collectStrings(value, out);
@@ -82,6 +82,7 @@ function collectStrings(value: unknown, out: string[]): void {
       collectStrings(v, out);
       const text = encodedText(key, v);
       if (text !== null) out.push(text);
+      out.push(key);
     }
   }
 }

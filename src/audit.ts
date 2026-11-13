@@ -48,14 +48,16 @@ function redact(value: unknown): unknown {
   if (typeof value === "string") return redactString(value);
   if (Array.isArray(value)) return value.map(redact);
   if (value !== null && typeof value === "object") {
-    return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, redact(v)]));
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([k, v]) => [redactString(k), redact(v)]),
+    );
   }
   return value;
 }
 
 /**
- * Prepare call arguments for the log: credentials are removed and long
- * payloads are truncated.
+ * Prepare call arguments for the log: credentials are removed, including from
+ * object keys, and long payloads are truncated.
  */
 export function summarizeArgs(args: unknown): unknown {
   const safe = redact(args ?? null);

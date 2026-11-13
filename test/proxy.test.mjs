@@ -355,6 +355,31 @@ test("policy: a call that reaches for credentials is denied and never reaches th
   assert.deepEqual(box.serverCalls().map((c) => c.arguments.path), ["/home/me/project/src/environment.ts"]);
 });
 
+test("policy: a credential path used as an object key never reaches the server", async () => {
+  const box = sandbox([READ_FILE]);
+  const s = session(box);
+  try {
+    await s.listTools();
+    const denied = await s.call("read_file", { "/home/me/.ssh/id_rsa": "read" });
+    assert.equal(denied.result.isError, true);
+    assert.match(denied.result.content[0].text, /Blocked by toolwarden policy/);
+    assert.doesNotMatch(JSON.stringify(denied), /id_rsa/);
+
+    const encoded = await s.call("read_file", { "file:///home/me/%2eenv": true });
+    assert.equal(encoded.result.isError, true);
+    assert.match(encoded.result.content[0].text, /Blocked by toolwarden policy/);
+    assert.doesNotMatch(JSON.stringify(encoded), /%2eenv/);
+
+    const ok = await s.call("read_file", { path: "/home/me/project/README.md" });
+    assert.equal(ok.result.isError, false);
+  } finally {
+    await s.close();
+  }
+  assert.deepEqual(box.serverCalls().map((c) => c.arguments.path), ["/home/me/project/README.md"]);
+  assert.doesNotMatch(JSON.stringify(box.serverCalls()), /id_rsa|%2eenv|\.ssh|\.env/);
+  assert.match(s.stderr(), /DENIED call to "read_file"/);
+});
+
 test("policy: a credential path hidden in base64 data never reaches the server", async () => {
   const box = sandbox([READ_FILE]);
   const ssh = Buffer.from("cat ~/.ssh/id_rsa").toString("base64");
