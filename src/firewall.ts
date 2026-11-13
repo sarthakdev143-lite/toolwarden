@@ -319,15 +319,21 @@ export class Firewall {
           const rewritten = this.rewriteRoots(msg);
           if (rewritten) return { forward: true, send: rewritten };
         }
-        if ("result" in msg) {
-          if (this.elicitationIdsAwaitingAnswer.delete(id)) {
-            const result = isObject(msg.result) ? msg.result : {};
-            const args = "content" in result ? result.content : result;
-            const flowed = this.flowDecision(msg, "elicitation", "answer", args);
+        if (this.elicitationIdsAwaitingAnswer.delete(id)) {
+          const body = "result" in msg ? msg.result : "error" in msg ? msg.error : undefined;
+          if (body !== undefined) {
+            const denied = this.policyDecision(msg, "elicitation", "other", body, "elicitation/create");
+            if (denied) return denied;
+            const flowed = this.flowDecision(msg, "elicitation", "answer", body);
             if (flowed) return flowed;
           }
-          if (this.samplingIdsAwaitingAnswer.delete(id)) {
-            const flowed = this.flowDecision(msg, "sampling", "answer", msg.result);
+        }
+        if (this.samplingIdsAwaitingAnswer.delete(id)) {
+          const body = "result" in msg ? msg.result : "error" in msg ? msg.error : undefined;
+          if (body !== undefined) {
+            const denied = this.policyDecision(msg, "sampling", "other", body, "sampling/createMessage");
+            if (denied) return denied;
+            const flowed = this.flowDecision(msg, "sampling", "answer", body);
             if (flowed) return flowed;
           }
         }
