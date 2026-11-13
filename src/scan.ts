@@ -115,14 +115,14 @@ function encodedText(key: string, value: unknown): string | null {
   return decodedBlob(value);
 }
 
-/** Includes text stored in a base64 blob (URL-safe, unpadded, or written with a compatibility or invisible character), including when that blob is a list or an object, including an object in that list, in image and audio data, including when that data is a list or an object, including an object in that list, and in object keys. */
+/** Includes text stored in a base64 blob (URL-safe, unpadded, or written with a compatibility or invisible character), including when that blob is a list or an object, including an object in that list and an object inside that object, in image and audio data, including when that data is a list or an object, including an object in that list, and in object keys. */
 export function collectText(value: unknown): string[] {
   const out: string[] = [];
   collectStrings(value, out, false);
   return out;
 }
 
-function collectStrings(value: unknown, out: string[], decode: boolean, decodeItems = false): void {
+function collectStrings(value: unknown, out: string[], decode: boolean, decodeItems = false, decodeNested = false): void {
   if (typeof value === "string") {
     out.push(value);
     if (decode) {
@@ -133,15 +133,17 @@ function collectStrings(value: unknown, out: string[], decode: boolean, decodeIt
   }
   if (Array.isArray(value)) {
     for (const item of value) {
-      if (typeof item === "string" || Array.isArray(item)) collectStrings(item, out, decode, decodeItems);
-      else collectStrings(item, out, decodeItems, false);
+      if (typeof item === "string" || Array.isArray(item)) collectStrings(item, out, decode, decodeItems, decodeNested);
+      else collectStrings(item, out, decodeItems, false, decodeNested);
     }
     return;
   }
   if (value !== null && typeof value === "object") {
     for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
-      const child = key === "data" || key === "blob" || (decode && typeof v === "string");
-      collectStrings(v, out, child, (key === "data" || key === "blob") && Array.isArray(v));
+      const inBlobList = key === "blob" && Array.isArray(v);
+      const nestedObject = decodeNested && v !== null && typeof v === "object" && !Array.isArray(v);
+      const child = key === "data" || key === "blob" || ((decode || decodeNested) && typeof v === "string") || nestedObject;
+      collectStrings(v, out, child, (key === "data" || key === "blob") && Array.isArray(v), inBlobList);
       out.push(key);
     }
   }
