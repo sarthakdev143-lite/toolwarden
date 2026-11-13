@@ -43,7 +43,7 @@ export const DEFAULT_RULES: Rule[] = [
   },
   {
     id: "cloud-credentials",
-    pattern: "\\.aws[\\\\/](credentials|config)|\\.config[\\\\/]gcloud|\\.azure[\\\\/]|\\.kube[\\\\/]config",
+    pattern: "(^|[\\\\/])\\.(aws|azure|kube)($|[^\\w.-])|\\.config[\\\\/]gcloud($|[^\\w.-])",
     message: "references cloud credentials",
   },
   {
