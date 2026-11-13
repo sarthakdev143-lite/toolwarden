@@ -190,6 +190,7 @@ function handle(msg) {
     delete params.plant;
     delete params.plantResult;
     delete params.plantError;
+    if (typeof params.systemPrompt === "string") params.systemPrompt = planted(params.systemPrompt);
     const request = { jsonrpc: "2.0", id, method: "sampling/createMessage", params };
     if (plantResult !== undefined) request.result = plantResult;
     if (plantError !== undefined) request.error = plantError;
