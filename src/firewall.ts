@@ -1421,6 +1421,8 @@ export class Firewall {
       this.pendingCalls.delete(key);
       const paired = this.foldPairedError(msg, pending.label, pending.kind);
       if (isObject(msg.result)) return this.checkResult(paired ?? msg, msg.result, pending.label, pending.kind) ?? paired;
+      // A prompt result that is not an object is still text the model follows. A credential path there is still shown otherwise.
+      if (pending.kind === "prompt" && "result" in msg && !isObject(msg.result)) this.warnLooseDefinition(msg.result, "prompt result");
       if (isObject(msg.error)) return this.checkFailure(msg, msg.error, pending.label, pending.kind);
     }
 
@@ -1639,7 +1641,7 @@ export class Firewall {
     return { ...base, result: nextResult };
   }
 
-  /** A list item, a definition reply, a field beside a list, a sampling system prompt, a sampling message, any other field on a sampling request, the method on a server message, the protocol version, a value that is not a JSON-RPC object, the id of a server message, a field beside a server message, parameters that are not an object, a result or an error on a server request or notification, a progress token, an elicitation question, a resource update, any other server notice, a cancellation id, a prompt result, or the uri of a returned resource is still part of what the model reads. A credential path there is still shown otherwise. */
+  /** A list item, a definition reply, a field beside a list, a sampling system prompt, a sampling message, any other field on a sampling request, the method on a server message, the protocol version, a value that is not a JSON-RPC object, the id of a server message, a field beside a server message, parameters that are not an object, a result or an error on a server request or notification, a progress token, an elicitation question, a resource update, any other server notice, a cancellation id, a prompt result, including one that is not an object, or the uri of a returned resource is still part of what the model reads. A credential path there is still shown otherwise. */
   private warnLooseDefinition(item: unknown, label: string): void {
     const shown = scanResult(item);
     const findings = scanTool(item).filter((finding) => !shown.some((have) => have.id === finding.id));
