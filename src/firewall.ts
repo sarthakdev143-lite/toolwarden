@@ -322,7 +322,7 @@ export class Firewall {
     if (typeof msg.method !== "string") {
       if ("id" in msg) {
         const id = requestId(msg.id);
-        const rootAnswer = this.rootsIdsAwaitingAnswer.has(id) && "result" in msg;
+        const rootAnswer = this.rootsIdsAwaitingAnswer.has(id);
         const elicitAnswer = this.elicitationIdsAwaitingAnswer.has(id);
         const samplingAnswer = this.samplingIdsAwaitingAnswer.has(id);
         const asked = this.unknownRequestsAwaitingAnswer.get(id);

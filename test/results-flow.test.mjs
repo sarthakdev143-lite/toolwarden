@@ -1836,6 +1836,94 @@ test("flow: a credential in a filesystem-root error is reported when another ser
   assert.equal(JSON.stringify(box.audit()).includes(FAKE_TOKEN), false);
 });
 
+test("a credential path beside an error answering a filesystem-root request never reaches the server", async () => {
+  const box = sandbox([ECHO]);
+  const ssh = "file:///home/me/.ssh/id_rsa";
+  const encoded = "file:///home/me/%2essh/id_rsa";
+  const s = session(box);
+  try {
+    await s.listTools();
+    const first = s.wait(9003);
+    await s.request("test/roots", {});
+    const ask = await first;
+    const deniedReply = s.wait(ask.id);
+    s.send({ jsonrpc: "2.0", id: ask.id, error: { code: -32000, message: "file not found" }, note: ssh });
+    const denied = await deniedReply;
+    assert.match(denied.error.message, /Blocked by toolwarden/);
+    assert.doesNotMatch(denied.error.message, /\.ssh/);
+
+    const second = s.wait(9003);
+    await s.request("test/roots", {});
+    const again = await second;
+    const encodedReply = s.wait(again.id);
+    s.send({
+      jsonrpc: "2.0",
+      id: again.id,
+      error: { code: -32000, message: "file not found" },
+      extra: encoded,
+    });
+    const encodedDenied = await encodedReply;
+    assert.match(encodedDenied.error.message, /Blocked by toolwarden/);
+
+    const third = s.wait(9003);
+    await s.request("test/roots", {});
+    const thirdAsk = await third;
+    s.send({ jsonrpc: "2.0", id: thirdAsk.id, error: { code: -32000, message: "file not found" }, note: "try again" });
+    const ordinary = await deliveredRootsError(box, "file not found");
+    assert.equal(ordinary.error.message, "file not found");
+    assert.equal(ordinary.note, "try again");
+  } finally {
+    await s.close();
+  }
+  assert.doesNotMatch(JSON.stringify(box.serverCalls()), /\.ssh|%2essh/);
+  assert.match(s.stderr(), /DENIED request "roots" on "fake"/);
+
+  const warning = session(box, ["--mode", "warn"]);
+  try {
+    await warning.listTools();
+    const incoming = warning.wait(9003);
+    await warning.request("test/roots", {});
+    const ask = await incoming;
+    warning.send({ jsonrpc: "2.0", id: ask.id, error: { code: -32000, message: "still missing" }, note: ssh });
+    const kept = await deliveredRootsError(box, "still missing");
+    assert.equal(kept.note, ssh);
+  } finally {
+    await warning.close();
+  }
+  assert.match(warning.stderr(), /warn mode, not blocked/);
+});
+
+test("flow: a credential beside a filesystem-root error is reported when another server is told about it", async () => {
+  const box = sandbox([ECHO]);
+  const vault = session(box, [], "vault");
+  try {
+    await vault.listTools();
+    await vault.call("echo", { echo: `your token is ${FAKE_TOKEN}` });
+  } finally {
+    await vault.close();
+  }
+
+  const web = session(box, [], "web");
+  try {
+    await web.listTools();
+    const incoming = web.wait(9003);
+    await web.request("test/roots", {});
+    const ask = await incoming;
+    web.send({
+      jsonrpc: "2.0",
+      id: ask.id,
+      error: { code: -32000, message: "file not found" },
+      note: `your token is ${FAKE_TOKEN}`,
+    });
+    const delivered = await deliveredRootsError(box, "file not found");
+    assert.equal(delivered.note, `your token is ${FAKE_TOKEN}`);
+  } finally {
+    await web.close();
+  }
+  assert.match(web.stderr(), /WARNING answer to "roots" on "web" carries a credential that server "vault" returned/);
+  assert.equal(JSON.stringify(box.audit()).includes(FAKE_TOKEN), false);
+});
+
 test("a credential path beside a client message never reaches the server", async () => {
   const box = sandbox([ECHO]);
   const ssh = "file:///home/me/.ssh/id_rsa";
