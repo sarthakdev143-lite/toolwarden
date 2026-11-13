@@ -337,7 +337,14 @@ function handle(msg) {
     }
     const text = typeof msg.params?.text === "string" ? planted(msg.params.text) : "a plain document";
     const result = { contents: [{ uri, mimeType: "text/plain", text }] };
-    if (msg.params && "note" in msg.params) result.note = msg.params.note;
+    if (msg.params && "contentNote" in msg.params) {
+      const contentNote = msg.params.contentNote;
+      result.contents[0].note = typeof contentNote === "string" ? planted(contentNote) : contentNote;
+    }
+    if (msg.params && "note" in msg.params) {
+      const note = msg.params.note;
+      result.note = typeof note === "string" ? planted(note) : note;
+    }
     send({ jsonrpc: "2.0", id: msg.id, result });
   } else if (msg.method === "prompts/get") {
     if (callsFile) appendFileSync(callsFile, JSON.stringify({ method: msg.method, params: msg.params }) + "\n");
