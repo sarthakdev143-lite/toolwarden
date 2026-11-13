@@ -1630,7 +1630,7 @@ export class Firewall {
     return { ...base, result: nextResult };
   }
 
-  /** A list item, a definition reply, or a field beside a list is still part of what the model reads. A credential path there is still shown otherwise. */
+  /** A list item, a definition reply, a field beside a list, or a sampling system prompt is still part of what the model reads. A credential path there is still shown otherwise. */
   private warnLooseDefinition(item: unknown, label: string): void {
     const shown = scanResult(item);
     const findings = scanTool(item).filter((finding) => !shown.some((have) => have.id === finding.id));
@@ -1980,9 +1980,11 @@ export class Firewall {
     return { ...msg, params: withhold ? withholdElicit(text) : annotateElicit(params, text) };
   }
 
+  /** The system prompt is instructions the model follows. A credential path there is still shown otherwise. */
   private checkSampling(msg: Json): Json | null {
     const params = isObject(msg.params) ? msg.params : {};
     this.opts.flow?.record(params);
+    if ("systemPrompt" in params) this.warnLooseDefinition(params.systemPrompt, "sampling prompt");
     if (this.resultMode === "off") return null;
     const findings = scanResult(params);
     if (findings.length === 0) return null;
