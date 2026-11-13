@@ -91,10 +91,16 @@ const CHECKS: Check[] = [
   },
 ];
 
-/** One layer of standard base64 when the bytes are UTF-8 text; null for anything else. */
+/** One layer of base64, including the URL-safe alphabet and omitted padding, when the bytes are UTF-8 text; null for anything else. */
 export function decodedBlob(value: string): string | null {
-  const compact = value.replace(/\s+/g, "");
-  if (compact.length < 8 || compact.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(compact)) return null;
+  let compact = value.replace(/\s+/g, "").replace(/-/g, "+").replace(/_/g, "/");
+  if (compact.length < 8) return null;
+  if (!compact.includes("=")) {
+    const rest = compact.length % 4;
+    if (rest === 1) return null;
+    if (rest > 0) compact += "=".repeat(4 - rest);
+  }
+  if (compact.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(compact)) return null;
   const bytes = Buffer.from(compact, "base64");
   if (bytes.length === 0 || bytes.length > 2_000_000) return null;
   if (bytes.toString("base64").replace(/=+$/, "") !== compact.replace(/=+$/, "")) return null;
@@ -108,7 +114,7 @@ function encodedText(key: string, value: unknown): string | null {
   return decodedBlob(value);
 }
 
-/** Includes text stored in a base64 blob, in image and audio data, and in object keys. */
+/** Includes text stored in a base64 blob (URL-safe or with the padding left off), in image and audio data, and in object keys. */
 export function collectText(value: unknown): string[] {
   const out: string[] = [];
   collectStrings(value, out);

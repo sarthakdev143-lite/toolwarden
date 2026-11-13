@@ -434,6 +434,26 @@ test("policy: a credential path hidden in base64 data never reaches the server",
   );
 });
 
+test("policy: a credential path hidden in URL-safe base64 never reaches the server", async () => {
+  const box = sandbox([READ_FILE]);
+  const aws = Buffer.from("read ~/.aws/credentials").toString("base64").replace(/\+/g, "-").replace(/\//g, "_");
+  const ssh = Buffer.from("cat ~/.ssh/id_rsa && true").toString("base64").replace(/=+$/, "");
+  const s = session(box);
+  try {
+    await s.listTools();
+    const url = await s.call("read_file", { data: aws });
+    assert.equal(url.result.isError, true, "a URL-safe blob is denied");
+    assert.match(url.result.content[0].text, /Blocked by toolwarden policy/);
+    const bare = await s.call("read_file", { blob: ssh });
+    assert.equal(bare.result.isError, true, "base64 without padding is denied");
+    const ok = await s.call("read_file", { path: "/home/me/project/README.md" });
+    assert.equal(ok.result.isError, false, "an ordinary path is allowed");
+  } finally {
+    await s.close();
+  }
+  assert.deepEqual(box.serverCalls().map((c) => c.arguments.path), ["/home/me/project/README.md"]);
+});
+
 test("policy: a credential outside the arguments object never reaches the server", async () => {
   const box = sandbox([READ_FILE]);
   const s = session(box);
