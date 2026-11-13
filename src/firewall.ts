@@ -90,6 +90,24 @@ function scrubSuspicious(value: unknown): unknown {
   return value;
 }
 
+function annotateSampling(params: Json, text: string, messages: unknown): Json {
+  const next: Json = { ...params, messages };
+  for (const [key, value] of Object.entries(params)) {
+    if (key === "messages" || key === "systemPrompt") continue;
+    next[key] = prefixSuspicious(value, text);
+  }
+  if (typeof params.systemPrompt === "string" && params.systemPrompt !== "") next.systemPrompt = text + "\n\n" + params.systemPrompt;
+  return next;
+}
+
+function withholdSampling(params: Json, message: unknown): Json {
+  const scrubbed = scrubSuspicious(params);
+  const next: Json = isObject(scrubbed) ? { ...scrubbed } : {};
+  delete next.systemPrompt;
+  next.messages = [message];
+  return next;
+}
+
 function withholdIntro(result: Json, text: string): Json {
   const scrubbed = scrubSuspicious(result);
   return { ...(isObject(scrubbed) ? scrubbed : {}), instructions: text };
@@ -554,10 +572,9 @@ export class Firewall {
       if (this.resultMode !== "annotate") return null;
     }
     const message = { role: "user", content: { type: "text", text } };
-    const messages = withhold ? [message] : [message, ...(Array.isArray(params.messages) ? params.messages : [])];
-    const nextParams: Json = { ...params, messages };
-    if (withhold) delete nextParams.systemPrompt;
-    else if (typeof params.systemPrompt === "string" && params.systemPrompt !== "") nextParams.systemPrompt = text + "\n\n" + params.systemPrompt;
+    const nextParams = withhold
+      ? withholdSampling(params, message)
+      : annotateSampling(params, text, [message, ...(Array.isArray(params.messages) ? params.messages : [])]);
     return { ...msg, params: nextParams };
   }
 
