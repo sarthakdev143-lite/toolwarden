@@ -371,6 +371,11 @@ function handle(msg) {
       send({ jsonrpc: "2.0", id: msg.id, result: { contents: [{ uri, mimeType: "text/plain", blob: { note } }] } });
       return;
     }
+    if (msg.params?.listBlob) {
+      const note = typeof msg.params.text === "string" ? planted(msg.params.text) : "a plain document";
+      send({ jsonrpc: "2.0", id: msg.id, result: { contents: [{ uri, mimeType: "text/plain", blob: [note] }] } });
+      return;
+    }
     const item = { uri, mimeType: "text/plain", text };
     if (msg.params && "contentNote" in msg.params) {
       const contentNote = msg.params.contentNote;
