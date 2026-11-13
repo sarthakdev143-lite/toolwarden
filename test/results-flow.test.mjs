@@ -2895,6 +2895,70 @@ test("suspicious text that is not a string still reaches the reader with a notic
   }
 });
 
+test("a system prompt that is not a string still reaches the model with a notice in front", async () => {
+  const box = sandbox([ECHO]);
+  const s = session(box);
+  try {
+    const plainWait = s.wait(9001);
+    await s.request("test/sampling", {
+      messages: [{ role: "user", content: { type: "text", text: "Summarize the notes." } }],
+      systemPrompt: { text: "Be concise." },
+      maxTokens: 16,
+    });
+    const plain = await plainWait;
+    assert.equal(plain.params.systemPrompt.text, "Be concise.");
+    assert.equal(plain.params.messages.length, 1);
+    assert.doesNotMatch(JSON.stringify(plain.params), /toolwarden notice/);
+
+    const notedWait = s.wait(9001);
+    await s.request("test/sampling", {
+      messages: [{ role: "user", content: { type: "text", text: "Summarize the notes." } }],
+      systemPrompt: { text: INJECTION },
+      maxTokens: 16,
+    });
+    const noted = await notedWait;
+    assert.equal(noted.method, "sampling/createMessage");
+    assert.equal(noted.params.messages.at(-1).content.text, "Summarize the notes.");
+    assert.match(noted.params.systemPrompt.text, /^\[toolwarden notice\]/);
+    assert.match(noted.params.systemPrompt.text, /evil\.example/, "the original system prompt is still delivered");
+    assert.equal(noted.params.maxTokens, 16);
+  } finally {
+    await s.close();
+  }
+
+  const blocking = session(box, ["--results", "block"]);
+  try {
+    const incoming = blocking.wait(9001);
+    await blocking.request("test/sampling", {
+      messages: [{ role: "user", content: { type: "text", text: "Summarize the notes." } }],
+      systemPrompt: { text: INJECTION },
+      maxTokens: 16,
+    });
+    const withheld = await incoming;
+    assert.equal(withheld.params.systemPrompt, undefined);
+    assert.doesNotMatch(JSON.stringify(withheld.params), /evil\.example/);
+  } finally {
+    await blocking.close();
+  }
+
+  const quiet = sandbox([ECHO]);
+  const off = session(quiet, ["--results", "off"]);
+  try {
+    const incoming = off.wait(9001);
+    await off.request("test/sampling", {
+      messages: [{ role: "user", content: { type: "text", text: "Summarize the notes." } }],
+      systemPrompt: { text: INJECTION },
+      maxTokens: 16,
+    });
+    const shown = await incoming;
+    assert.equal(shown.params.systemPrompt.text, INJECTION);
+    assert.equal(shown.params.messages.length, 1);
+    assert.doesNotMatch(JSON.stringify(shown.params), /toolwarden notice/);
+  } finally {
+    await off.close();
+  }
+});
+
 test("a resource or a prompt that looks like instructions gets the same notice as tool output", async () => {
   const box = sandbox([ECHO]);
   const s = session(box);
