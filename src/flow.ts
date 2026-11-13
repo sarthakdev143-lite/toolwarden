@@ -9,7 +9,7 @@ import { collectText, matchForms } from "./scan.js";
  *
  * Each wrapped server runs in its own toolwarden process, so they share what
  * they have seen through small files in the state directory. When a server
- * shows a tool definition, a catalog description, an introduction, a completion
+ * shows a tool definition, including one whose name is not a string, a catalog description, an introduction, a completion
  * suggestion, a completion error, a cancellation, a resource update, any
  * other notification, any other server request, a request for filesystem
  * roots, the reply to any other client request, the reply to a resource
