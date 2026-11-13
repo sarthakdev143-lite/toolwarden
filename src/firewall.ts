@@ -317,6 +317,28 @@ export class Firewall {
     if (typeof msg.method !== "string") {
       if ("id" in msg) {
         const id = String(msg.id);
+        const rootAnswer = this.rootsIdsAwaitingAnswer.has(id) && "result" in msg;
+        const elicitAnswer = this.elicitationIdsAwaitingAnswer.has(id);
+        const samplingAnswer = this.samplingIdsAwaitingAnswer.has(id);
+        const asked = this.unknownRequestsAwaitingAnswer.get(id);
+        if (rootAnswer || elicitAnswer || samplingAnswer || asked !== undefined) {
+          const label = rootAnswer ? "roots" : elicitAnswer ? "elicitation" : samplingAnswer ? "sampling" : (asked ?? "answer");
+          const toolName = rootAnswer
+            ? "roots/list"
+            : elicitAnswer
+              ? "elicitation/create"
+              : samplingAnswer
+                ? "sampling/createMessage"
+                : (asked ?? "answer");
+          const sided = this.answerSide(msg, label, toolName);
+          if (sided) {
+            if (rootAnswer) this.rootsIdsAwaitingAnswer.delete(id);
+            else if (elicitAnswer) this.elicitationIdsAwaitingAnswer.delete(id);
+            else if (samplingAnswer) this.samplingIdsAwaitingAnswer.delete(id);
+            else this.unknownRequestsAwaitingAnswer.delete(id);
+            return sided;
+          }
+        }
         if (this.rootsIdsAwaitingAnswer.delete(id) && "result" in msg) {
           const rewritten = this.rewriteRoots(msg);
           if (rewritten) return { forward: true, send: rewritten };
@@ -339,7 +361,6 @@ export class Firewall {
             if (flowed) return flowed;
           }
         }
-        const asked = this.unknownRequestsAwaitingAnswer.get(id);
         if (asked !== undefined) {
           this.unknownRequestsAwaitingAnswer.delete(id);
           const body = "result" in msg ? msg.result : "error" in msg ? msg.error : undefined;
@@ -449,6 +470,21 @@ export class Firewall {
       this.unknownClientRequestsAwaitingReply.set(idKey(scope, msg.id), visibleLabel(msg.method));
     }
     return decision;
+  }
+
+  /** Policy and flow for a field beside the result or error of an answer to the server. */
+  private answerSide(msg: Json, label: string, toolName: string): ClientDecision | null {
+    const body: Json = {};
+    for (const [key, value] of Object.entries(msg)) {
+      if (key === "jsonrpc" || key === "id" || key === "result" || key === "error") continue;
+      body[key] = value;
+    }
+    if (Object.keys(body).length === 0) return null;
+    const denied = this.policyDecision(msg, label, "other", body, toolName);
+    if (denied) return denied;
+    const flowed = this.flowDecision(msg, label, "answer", body);
+    if (flowed) return flowed;
+    return null;
   }
 
   /** Policy and flow for a field beside `params` on a method this firewall already handles. */

@@ -2413,6 +2413,88 @@ test("flow: a credential hidden in a base64 blob is recognized when another serv
   assert.ok(!logText.includes(FAKE_TOKEN), "the audit log never stores the credential itself");
 });
 
+test("a credential path beside an answer never reaches the server", async () => {
+  const box = sandbox([ECHO]);
+  const question = { message: "What should I call you?" };
+  const prompt = { messages: [{ role: "user", content: { type: "text", text: "Reply with a name." } }] };
+  const project = { uri: "file:///home/me/project", name: "Project" };
+  const ssh = "file:///home/me/.ssh/id_rsa";
+  const encoded = "file:///home/me/%2essh/%69d_rsa";
+
+  async function asked(s, kind) {
+    if (kind === "roots") {
+      const incoming = s.wait(9003);
+      await s.request("test/roots", {});
+      return incoming;
+    }
+    if (kind === "ask") {
+      const incoming = s.wait(9004);
+      await s.request("test/ask", { method: "custom/ask", params: { message: "Send a path." } });
+      return incoming;
+    }
+    const id = kind === "sampling" ? 9001 : 9002;
+    const method = kind === "sampling" ? "test/sampling" : "test/elicitation";
+    const incoming = s.wait(id);
+    await s.request(method, kind === "sampling" ? prompt : question);
+    return incoming;
+  }
+
+  const s = session(box);
+  try {
+    await s.listTools();
+    const accepted = await asked(s, "elicitation");
+    s.send({
+      jsonrpc: "2.0",
+      id: accepted.id,
+      result: { action: "accept", content: { name: "Ada" } },
+      note: "hello",
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.match(JSON.stringify(box.serverCalls()), /Ada/);
+    assert.match(JSON.stringify(box.serverCalls()), /hello/);
+
+    const before = box.serverCalls().length;
+    const cases = [
+      ["elicitation", { result: { action: "accept", content: { name: "Ada" } }, note: ssh }, "elicitation"],
+      ["sampling", { error: { code: -1, message: "no" }, note: encoded }, "sampling"],
+      ["ask", { result: { text: "here" }, note: ssh }, "custom/ask"],
+      ["roots", { result: { roots: [project] }, note: ssh }, "roots"],
+    ];
+    for (const [kind, body, label] of cases) {
+      const incoming = await asked(s, kind);
+      const denied = s.wait(incoming.id);
+      s.send({ jsonrpc: "2.0", id: incoming.id, ...body });
+      const reply = await denied;
+      assert.equal(reply.error.code, -32000);
+      assert.match(reply.error.message, /Blocked by toolwarden policy/);
+      assert.doesNotMatch(JSON.stringify(reply), /id_rsa|%2essh/);
+      assert.match(s.stderr(), new RegExp(`DENIED request "${label}"`));
+    }
+    assert.equal(box.serverCalls().length, before, "a denied answer never reaches the server");
+    assert.doesNotMatch(JSON.stringify(box.serverCalls()), /id_rsa|%2essh|\.ssh/);
+  } finally {
+    await s.close();
+  }
+
+  const warning = session(box, ["--mode", "warn"]);
+  try {
+    await warning.listTools();
+    const incoming = await asked(warning, "elicitation");
+    warning.send({
+      jsonrpc: "2.0",
+      id: incoming.id,
+      result: { action: "accept", content: { name: "Ada" } },
+      note: ssh,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  } finally {
+    await warning.close();
+  }
+  assert.match(warning.stderr(), /WARNING request "elicitation"/);
+  assert.match(warning.stderr(), /warn mode, not blocked/);
+  assert.match(JSON.stringify(box.serverCalls()), /id_rsa/);
+});
+
 test("a credential path in an answer to the server never reaches it", async () => {
   const box = sandbox([ECHO]);
   const question = { message: "What should I call you?" };
@@ -2477,6 +2559,40 @@ test("a credential path in an answer to the server never reaches it", async () =
   assert.match(warning.stderr(), /WARNING request "elicitation"/);
   assert.match(warning.stderr(), /warn mode, not blocked/);
   assert.match(JSON.stringify(box.serverCalls()), /id_rsa/);
+});
+
+test("flow: a credential beside an answer is reported", async () => {
+  const box = sandbox([ECHO]);
+  const prompt = { messages: [{ role: "user", content: { type: "text", text: "Summarize the token." } }] };
+  const answer = { role: "assistant", content: { type: "text", text: "done" }, model: "test" };
+  const vault = session(box, [], "vault");
+  try {
+    await vault.listTools();
+    await vault.call("echo", { echo: `your token is ${FAKE_TOKEN}` });
+    const ask = vault.wait(9001);
+    await vault.request("test/sampling", prompt);
+    const incoming = await ask;
+    vault.send({ jsonrpc: "2.0", id: incoming.id, result: answer, note: FAKE_TOKEN });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  } finally {
+    await vault.close();
+  }
+  assert.doesNotMatch(vault.stderr(), /returned \d+ minute/);
+
+  const web = session(box, [], "web");
+  try {
+    await web.listTools();
+    const ask = web.wait(9001);
+    await web.request("test/sampling", prompt);
+    const incoming = await ask;
+    web.send({ jsonrpc: "2.0", id: incoming.id, result: answer, note: `here is ${FAKE_TOKEN}` });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  } finally {
+    await web.close();
+  }
+  assert.match(web.stderr(), /WARNING answer to "sampling" on "web" carries a credential that server "vault" returned/);
+  assert.equal(JSON.stringify(box.audit()).includes(FAKE_TOKEN), false);
+  assert.ok(JSON.stringify(box.serverCalls()).includes(FAKE_TOKEN), "by default the answer is still delivered");
 });
 
 test("flow: a credential in a model's reply to another server is reported", async () => {
