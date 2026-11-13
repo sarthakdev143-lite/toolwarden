@@ -1295,7 +1295,7 @@ export class Firewall {
     return next;
   }
 
-  /** Scan and fingerprint a field beside `params`, `result`, or `error` on a server message. */
+  /** Scan and fingerprint a field beside `params`, `result`, or `error` on a server message. An instruction there is still shown otherwise. A credential path there is still shown otherwise. */
   private foldServerSide(msg: Json, decided: Json | null): Json | null {
     const side: Json = {};
     for (const [key, value] of Object.entries(msg)) {
@@ -1304,6 +1304,7 @@ export class Firewall {
     }
     if (Object.keys(side).length === 0) return decided;
     this.opts.flow?.record(side);
+    this.warnLooseDefinition(side, "field beside the message");
     if (this.resultMode === "off") return decided;
     const findings = scanResult(side);
     if (findings.length === 0) return decided;
@@ -1634,7 +1635,7 @@ export class Firewall {
     return { ...base, result: nextResult };
   }
 
-  /** A list item, a definition reply, a field beside a list, a sampling system prompt, the method on a server message, the protocol version, a value that is not a JSON-RPC object, or the id of a server message is still part of what the model reads. A credential path there is still shown otherwise. */
+  /** A list item, a definition reply, a field beside a list, a sampling system prompt, the method on a server message, the protocol version, a value that is not a JSON-RPC object, the id of a server message, or a field beside a server message is still part of what the model reads. A credential path there is still shown otherwise. */
   private warnLooseDefinition(item: unknown, label: string): void {
     const shown = scanResult(item);
     const findings = scanTool(item).filter((finding) => !shown.some((have) => have.id === finding.id));

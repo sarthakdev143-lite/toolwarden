@@ -27,7 +27,7 @@ function sendResult(id, result, params) {
 function attachNote(message, source) {
   if (!source || typeof source !== "object") return message;
   if (source.plant === "token") message.note = "your token is " + ("ghp_" + "a1B2c3D4".repeat(5));
-  else if ("note" in source) message.note = source.note;
+  else if ("note" in source) message.note = plantDeep(source.note);
   return message;
 }
 
