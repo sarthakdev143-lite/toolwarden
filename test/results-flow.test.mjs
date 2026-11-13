@@ -1924,6 +1924,156 @@ test("flow: a credential beside a filesystem-root error is reported when another
   assert.equal(JSON.stringify(box.audit()).includes(FAKE_TOKEN), false);
 });
 
+test("an error beside a result never carries a credential path to the server", async () => {
+  const box = sandbox([ECHO]);
+  const question = { message: "What should I call you?" };
+  const prompt = { messages: [{ role: "user", content: { type: "text", text: "Reply with a name." } }] };
+  const project = { uri: "file:///home/me/project", name: "Project" };
+  const ssh = "file:///home/me/.ssh/id_rsa";
+  const encoded = "file:///home/me/%2essh/%69d_rsa";
+
+  async function asked(s, kind) {
+    if (kind === "roots") {
+      const incoming = s.wait(9003);
+      await s.request("test/roots", {});
+      return incoming;
+    }
+    if (kind === "ask") {
+      const incoming = s.wait(9004);
+      await s.request("test/ask", { method: "custom/ask", params: { message: "Send a path." } });
+      return incoming;
+    }
+    const id = kind === "sampling" ? 9001 : 9002;
+    const method = kind === "sampling" ? "test/sampling" : "test/elicitation";
+    const incoming = s.wait(id);
+    await s.request(method, kind === "sampling" ? prompt : question);
+    return incoming;
+  }
+
+  const s = session(box);
+  try {
+    await s.listTools();
+    const accepted = await asked(s, "elicitation");
+    s.send({
+      jsonrpc: "2.0",
+      id: accepted.id,
+      result: { action: "accept", content: { name: "Ada" } },
+      error: { code: -1, message: "unused" },
+    });
+    const ordinary = await deliveredPaired(box, "Ada");
+    assert.equal(ordinary.error.message, "unused");
+
+    const rootsAsk = await asked(s, "roots");
+    s.send({
+      jsonrpc: "2.0",
+      id: rootsAsk.id,
+      result: { roots: [project] },
+      error: { code: -32000, message: "file not found" },
+    });
+    const rootsOrdinary = await deliveredPaired(box, project.uri);
+    assert.equal(rootsOrdinary.error.message, "file not found");
+    assert.deepEqual(rootsOrdinary.result.roots, [project]);
+
+    const before = box.serverCalls().length;
+    const cases = [
+      ["elicitation", { result: { action: "accept", content: { name: "Ada" } }, error: { code: -1, message: ssh } }, "elicitation"],
+      [
+        "sampling",
+        {
+          result: { role: "assistant", content: { type: "text", text: "Ada" }, model: "test" },
+          error: { code: -1, message: "no", data: encoded },
+        },
+        "sampling",
+      ],
+      ["ask", { result: { text: "here" }, error: ssh }, "custom/ask"],
+      ["roots", { result: { roots: [project] }, error: { code: -32000, message: ssh } }, "roots"],
+    ];
+    for (const [kind, body, label] of cases) {
+      const incoming = await asked(s, kind);
+      const logged = box.audit().filter((entry) => entry.event === "call_denied" && entry.tool === label).length;
+      const denied = s.wait(incoming.id);
+      s.send({ jsonrpc: "2.0", id: incoming.id, ...body });
+      const reply = await denied;
+      assert.equal(reply.error.code, -32000);
+      assert.match(reply.error.message, /Blocked by toolwarden policy/);
+      assert.doesNotMatch(JSON.stringify(reply), /id_rsa|%2essh/);
+      const denials = box.audit().filter((entry) => entry.event === "call_denied" && entry.tool === label).length;
+      assert.ok(denials > logged, `expected a denial for ${label}`);
+    }
+    assert.equal(box.serverCalls().length, before, "a denied answer never reaches the server");
+    assert.doesNotMatch(JSON.stringify(box.serverCalls()), /id_rsa|%2essh|\.ssh/);
+  } finally {
+    await s.close();
+  }
+  assert.match(s.stderr(), /DENIED request "elicitation"/);
+  assert.match(s.stderr(), /DENIED request "sampling"/);
+  assert.match(s.stderr(), /DENIED request "custom\/ask"/);
+  assert.match(s.stderr(), /DENIED request "roots"/);
+
+  const warning = session(box, ["--mode", "warn"]);
+  try {
+    await warning.listTools();
+    const incoming = await asked(warning, "elicitation");
+    warning.send({
+      jsonrpc: "2.0",
+      id: incoming.id,
+      result: { action: "accept", content: { name: "Bea" } },
+      error: { code: -1, message: ssh },
+    });
+    const kept = await deliveredPaired(box, ssh);
+    assert.equal(kept.result.content.name, "Bea");
+    assert.equal(kept.error.message, ssh);
+  } finally {
+    await warning.close();
+  }
+  assert.match(warning.stderr(), /warn mode, not blocked/);
+});
+
+async function deliveredPaired(box, text) {
+  const start = Date.now();
+  while (Date.now() - start < 2000) {
+    const found = box.serverCalls().find(
+      (call) => call.result !== undefined && call.error !== undefined && JSON.stringify(call).includes(text),
+    );
+    if (found) return found;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error("paired answer did not reach the server");
+}
+
+test("flow: a credential in an error beside a result is reported when another server is told about it", async () => {
+  const box = sandbox([ECHO]);
+  const project = { uri: "file:///home/me/project", name: "Project" };
+  const vault = session(box, [], "vault");
+  try {
+    await vault.listTools();
+    await vault.call("echo", { echo: `your token is ${FAKE_TOKEN}` });
+  } finally {
+    await vault.close();
+  }
+
+  const web = session(box, [], "web");
+  try {
+    await web.listTools();
+    const incoming = web.wait(9003);
+    await web.request("test/roots", {});
+    const ask = await incoming;
+    web.send({
+      jsonrpc: "2.0",
+      id: ask.id,
+      result: { roots: [project] },
+      error: { code: -32000, message: `your token is ${FAKE_TOKEN}` },
+    });
+    const delivered = await deliveredPaired(box, FAKE_TOKEN);
+    assert.equal(delivered.error.message, `your token is ${FAKE_TOKEN}`);
+    assert.deepEqual(delivered.result.roots, [project]);
+  } finally {
+    await web.close();
+  }
+  assert.match(web.stderr(), /WARNING answer to "roots" on "web" carries a credential that server "vault" returned/);
+  assert.equal(JSON.stringify(box.audit()).includes(FAKE_TOKEN), false);
+});
+
 test("a credential path beside a client message never reaches the server", async () => {
   const box = sandbox([ECHO]);
   const ssh = "file:///home/me/.ssh/id_rsa";
