@@ -324,13 +324,21 @@ export class Firewall {
       return { forward: true };
     }
 
+    if (msg.method === "resources/subscribe" || msg.method === "resources/unsubscribe") {
+      const params = isObject(msg.params) ? msg.params : {};
+      const uri = typeof params.uri === "string" && params.uri !== "" ? params.uri : "resource";
+      const denied = this.policyDecision(msg, visibleLabel(uri), "subscribe", params);
+      if (denied) return denied;
+      return { forward: true };
+    }
+
     return { forward: true };
   }
 
   private policyDecision(
     msg: Json,
     label: string,
-    kind: "resource" | "prompt" | "completion",
+    kind: "resource" | "prompt" | "completion" | "subscribe",
     args: unknown,
   ): ClientDecision | null {
     const { server, audit } = this.opts;
@@ -363,7 +371,7 @@ export class Firewall {
       `Blocked by toolwarden policy: this request ${d.message} (rule "${d.ruleId}"). ` +
       `If the user really wants this, they need to change the toolwarden policy themselves.`;
     if (!("id" in msg)) return { forward: false };
-    if (kind === "completion") {
+    if (kind === "completion" || kind === "subscribe") {
       return { forward: false, reply: { jsonrpc: "2.0", id: msg.id, error: { code: -32000, message: text } } };
     }
     return { forward: false, reply: { jsonrpc: "2.0", id: msg.id, result: this.placeNotice({}, kind, text, true) } };

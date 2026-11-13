@@ -818,6 +818,37 @@ test("a completion argument that names credentials never reaches the server", as
   );
 });
 
+test("a resource subscription that names credentials never reaches the server", async () => {
+  const box = sandbox([ECHO]);
+  const s = session(box);
+  try {
+    const ssh = await s.request("resources/subscribe", { uri: "file:///home/me/.ssh/id_rsa" });
+    assert.equal(ssh.error.code, -32000);
+    assert.match(ssh.error.message, /Blocked by toolwarden policy/);
+    assert.doesNotMatch(JSON.stringify(ssh), /id_rsa/);
+
+    const encoded = await s.request("resources/unsubscribe", { uri: "file:///home/me/%2eenv" });
+    assert.equal(encoded.error.code, -32000);
+    assert.match(encoded.error.message, /Blocked by toolwarden policy/);
+    assert.doesNotMatch(JSON.stringify(encoded), /%2eenv/);
+
+    const ok = await s.request("resources/subscribe", { uri: "file:///home/me/project/README.md" });
+    assert.deepEqual(ok.result, {});
+
+    const drop = await s.request("resources/unsubscribe", { uri: "file:///home/me/project/README.md" });
+    assert.deepEqual(drop.result, {});
+  } finally {
+    await s.close();
+  }
+  assert.deepEqual(
+    box.serverCalls().map((c) => [c.method, c.params?.uri]),
+    [
+      ["resources/subscribe", "file:///home/me/project/README.md"],
+      ["resources/unsubscribe", "file:///home/me/project/README.md"],
+    ],
+  );
+});
+
 test("a resource read or prompt argument that names credentials never reaches the server", async () => {
   const box = sandbox([ECHO]);
   const s = session(box);
