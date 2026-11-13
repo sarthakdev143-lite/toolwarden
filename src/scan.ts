@@ -48,7 +48,8 @@ const CHECKS: Check[] = [
   },
 ];
 
-function decodedBlob(value: string): string | null {
+/** One layer of standard base64 when the bytes are UTF-8 text; null for anything else. */
+export function decodedBlob(value: string): string | null {
   const compact = value.replace(/\s+/g, "");
   if (compact.length < 8 || compact.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(compact)) return null;
   const bytes = Buffer.from(compact, "base64");

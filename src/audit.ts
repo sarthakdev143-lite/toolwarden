@@ -2,6 +2,7 @@ import { appendFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { SECRET_PATTERNS } from "./flow.js";
 import { percentDecoded } from "./percent.js";
+import { decodedBlob } from "./scan.js";
 
 export type AuditEvent =
   | "session_start"
@@ -27,11 +28,17 @@ export interface AuditRecord {
 
 const MAX_ARG_CHARS = 2000;
 
-/** Replace credential-shaped strings, so the log never becomes a place secrets are stored. */
+function concealedText(value: string): string | null {
+  const blob = decodedBlob(value);
+  const source = blob ?? value;
+  const percent = percentDecoded(source);
+  if (blob === null && percent === null) return null;
+  return percent ?? source;
+}
+
 function redactString(value: string): string {
-  const decoded = percentDecoded(value);
-  const source = decoded ?? value;
-  let out = source;
+  const decoded = concealedText(value);
+  let out = decoded ?? value;
   for (const pattern of SECRET_PATTERNS) out = out.replace(pattern, "[credential removed]");
   if (decoded !== null && out === decoded) return value;
   return out;

@@ -90,6 +90,6 @@ tool may still be changing.
 - **`init --via npx` pins an exact version.** The tool that guards against silent changes
   does not update itself silently.
 - **Nothing leaves the machine.** No telemetry and no network calls of its own.
-- **Secrets are not stored.** Credential-shaped values are removed from the audit log, and
-  flow tracking keeps only hashes.
+- **Secrets are not stored.** Credential-shaped values are removed from the audit log,
+  including one layer of percent-encoding or base64, and flow tracking keeps only hashes.
 - **Fail closed where it is safe to.** A changed tool is blocked until someone decides.

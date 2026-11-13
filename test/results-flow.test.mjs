@@ -569,6 +569,20 @@ test("an encoded credential is removed from the log, and ordinary encoding is ke
   assert.match(logged, /\[credential removed\]/);
   assert.deepEqual(summarizeArgs({ body: `posting ${FAKE_TOKEN}` }), { body: "posting [credential removed]" });
   assert.deepEqual(summarizeArgs({ q: "notes%20copy.md" }), { q: "notes%20copy.md" });
+
+  const blob = Buffer.from(FAKE_TOKEN, "utf8").toString("base64");
+  const loggedBlob = JSON.stringify(summarizeArgs({ body: blob }));
+  assert.equal(loggedBlob.includes(blob), false);
+  assert.equal(loggedBlob.includes(FAKE_TOKEN), false);
+  assert.match(loggedBlob, /\[credential removed\]/);
+  const wrapped = Buffer.from(`posting ${encoded}`, "utf8").toString("base64");
+  const loggedWrapped = JSON.stringify(summarizeArgs({ body: wrapped }));
+  assert.equal(loggedWrapped.includes(wrapped), false);
+  assert.equal(loggedWrapped.includes(FAKE_TOKEN), false);
+  const notes = Buffer.from("Meeting notes for Thursday.", "utf8").toString("base64");
+  assert.deepEqual(summarizeArgs({ body: notes }), { body: notes });
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).toString("base64");
+  assert.deepEqual(summarizeArgs({ body: png }), { body: png });
 });
 
 test("flow: a credential carried outside the arguments object is reported", async () => {
