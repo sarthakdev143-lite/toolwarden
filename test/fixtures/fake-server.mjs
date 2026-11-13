@@ -48,6 +48,17 @@ function planted(text) {
   return text;
 }
 
+function plantMarked(value) {
+  if (typeof value === "string") return planted(value);
+  if (Array.isArray(value)) return value.map(plantMarked);
+  if (value && typeof value === "object") {
+    const next = {};
+    for (const [key, item] of Object.entries(value)) next[key] = plantMarked(item);
+    return next;
+  }
+  return value;
+}
+
 function plantDeep(value) {
   if (typeof value === "string") return planted(value);
   if (Array.isArray(value)) return value.map(plantDeep);
@@ -372,7 +383,7 @@ function handle(msg) {
     if (callsFile) appendFileSync(callsFile, JSON.stringify(envelope(msg.params, msg)) + "\n");
     if (msg.params?.arguments && "rawResult" in msg.params.arguments) {
       const rawResult = msg.params.arguments.rawResult;
-      const message = { jsonrpc: "2.0", id: msg.id, result: typeof rawResult === "string" ? planted(rawResult) : rawResult };
+      const message = { jsonrpc: "2.0", id: msg.id, result: plantMarked(rawResult) };
       if (msg.params.arguments.beside && typeof msg.params.arguments.beside === "object") message.error = msg.params.arguments.beside;
       if ("looseMethod" in msg.params.arguments) message.method = msg.params.arguments.looseMethod;
       send(message);
