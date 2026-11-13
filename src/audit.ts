@@ -51,8 +51,9 @@ function redact(value: unknown): unknown {
 
 /**
  * Prepare call arguments for the log: credentials are removed, including from
- * object keys and from text written with a compatibility character or an
- * invisible character, and long payloads are truncated.
+ * object keys, from text written with a compatibility character or an
+ * invisible character, and from URL-safe base64 or base64 with the padding
+ * left off, and long payloads are truncated.
  */
 export function summarizeArgs(args: unknown): unknown {
   const safe = redact(args ?? null);

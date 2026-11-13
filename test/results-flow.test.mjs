@@ -1830,6 +1830,8 @@ test("fingerprints: secrets and long ids are found, plain words are not", () => 
   assert.deepEqual(extractFingerprints(encoded).secrets, extractFingerprints(FAKE_TOKEN).secrets);
   const blob = Buffer.from(`your token is ${FAKE_TOKEN}`, "utf8").toString("base64");
   assert.deepEqual(extractFingerprints({ contents: [{ blob }] }).secrets, extractFingerprints(FAKE_TOKEN).secrets);
+  const bare = blob.replace(/=+$/, "");
+  assert.deepEqual(extractFingerprints({ contents: [{ blob: bare }] }).secrets, extractFingerprints(FAKE_TOKEN).secrets);
   const image = Buffer.from(`your token is ${FAKE_TOKEN}`, "utf8").toString("base64");
   assert.deepEqual(extractFingerprints({ content: [{ type: "image", data: image }] }).secrets, extractFingerprints(FAKE_TOKEN).secrets);
   const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).toString("base64");
@@ -1861,6 +1863,11 @@ test("an encoded credential is removed from the log, and ordinary encoding is ke
   assert.equal(loggedBlob.includes(blob), false);
   assert.equal(loggedBlob.includes(FAKE_TOKEN), false);
   assert.match(loggedBlob, /\[credential removed\]/);
+  const bare = blob.replace(/=+$/, "");
+  assert.notEqual(bare.length % 4, 0);
+  const loggedBare = JSON.stringify(summarizeArgs({ body: bare }));
+  assert.equal(loggedBare.includes(FAKE_TOKEN), false);
+  assert.match(loggedBare, /\[credential removed\]/);
   const wrapped = Buffer.from(`posting ${encoded}`, "utf8").toString("base64");
   const loggedWrapped = JSON.stringify(summarizeArgs({ body: wrapped }));
   assert.equal(loggedWrapped.includes(wrapped), false);
