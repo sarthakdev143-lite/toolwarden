@@ -59,6 +59,12 @@ function handle(msg) {
   } else if (msg.method === "test/progress") {
     send({ jsonrpc: "2.0", method: "notifications/progress", params: msg.params });
     send({ jsonrpc: "2.0", id: msg.id, result: { ok: true } });
+  } else if (msg.method === "test/notify") {
+    const params = msg.params && typeof msg.params === "object" ? msg.params : {};
+    const note = { jsonrpc: "2.0", method: params.method };
+    if ("params" in params) note.params = params.params;
+    send(note);
+    send({ jsonrpc: "2.0", id: msg.id, result: { ok: true } });
   } else if (msg.method === "test/updated") {
     send({ jsonrpc: "2.0", method: "notifications/resources/updated", params: msg.params });
     send({ jsonrpc: "2.0", id: msg.id, result: { ok: true } });
