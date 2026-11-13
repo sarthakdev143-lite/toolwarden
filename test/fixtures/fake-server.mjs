@@ -245,6 +245,9 @@ function handle(msg) {
   } else if (msg.method === undefined && msg.id !== undefined && (msg.result !== undefined || msg.error !== undefined)) {
     if (callsFile) appendFileSync(callsFile, JSON.stringify(msg) + "\n");
   } else if (msg.id !== undefined) {
+    if (callsFile) appendFileSync(callsFile, JSON.stringify({ method: msg.method, params: msg.params }) + "\n");
     send({ jsonrpc: "2.0", id: msg.id, error: { code: -32601, message: "Method not found" } });
+  } else if (typeof msg.method === "string" && callsFile) {
+    appendFileSync(callsFile, JSON.stringify({ method: msg.method, params: msg.params }) + "\n");
   }
 }
