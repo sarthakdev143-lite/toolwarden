@@ -63,6 +63,14 @@ test("default policy catches credential paths in nested arguments", () => {
   assert.equal(policy.evaluate("run", { file: "/app/docs/env.md", n: 3 }).denied, null);
   assert.equal(policy.evaluate("run", { file: "/home/me/project/src/environment.ts" }).denied, null);
   assert.equal(policy.evaluate("run", { file: "filename.env" }).denied, null);
+  assert.equal(policy.evaluate("read", { uri: "file:///home/me/%2eenv" }).denied?.ruleId, "env-files");
+  assert.equal(policy.evaluate("read", { uri: "/%2eenv%FF" }).denied?.ruleId, "env-files");
+  assert.equal(policy.evaluate("read", { uri: "file:///home/me/%2eaws/credentials" }).denied?.ruleId, "cloud-credentials");
+  assert.equal(policy.evaluate("read", { uri: "file:///home/me/%2essh/%69d_rsa" }).denied?.ruleId, "ssh-keys");
+  assert.equal(policy.evaluate("read", { file: "/home/me/%2enpmrc" }).denied?.ruleId, "package-tokens");
+  assert.equal(policy.evaluate("read", { uri: "file:///home/me/notes%20copy.md" }).denied, null);
+  assert.equal(policy.evaluate("read", { q: "100%" }).denied, null);
+  assert.equal(policy.evaluate("read", { q: "https://example.com/search?q=%2eenv" }).denied, null);
 });
 
 test("warn rules do not deny", () => {

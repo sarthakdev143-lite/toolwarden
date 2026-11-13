@@ -7,6 +7,8 @@
  * They produce warnings, never blocks: heuristics have false positives.
  */
 
+import { includePercentDecoded } from "./percent.js";
+
 interface Check {
   id: string;
   pattern: RegExp;
@@ -65,7 +67,7 @@ export interface Finding {
 export function scanTool(tool: unknown): Finding[] {
   const strings: string[] = [];
   collectStrings(tool, strings);
-  const text = strings.join("\n");
+  const text = includePercentDecoded(strings).join("\n");
   const findings: Finding[] = [];
   for (const check of CHECKS) {
     if (check.pattern.test(text)) findings.push({ id: check.id, message: check.message });
@@ -111,7 +113,7 @@ const RESULT_CHECKS: Check[] = [
 export function scanResult(result: unknown): Finding[] {
   const strings: string[] = [];
   collectStrings(result, strings);
-  const text = strings.join("\n").slice(0, 2_000_000);
+  const text = includePercentDecoded(strings).join("\n").slice(0, 2_000_000);
   const findings: Finding[] = [];
   for (const check of RESULT_CHECKS) {
     if (check.pattern.test(text)) findings.push({ id: check.id, message: check.message });

@@ -208,7 +208,7 @@ With no flow rules, a credential moving between servers is reported and other va
 A security tool should be clear about its limits.
 
 - **The first version of a tool is trusted.** Pinning catches *changes*. If a server is malicious on day one, pinning will not stop it. The hidden-instruction checks help here, but they are heuristics, and they warn without blocking.
-- **The checks are pattern matching.** Argument rules, result checks and flow tracking stop the obvious cases. Values that are encoded, split up, reworded, or built by the server itself can get past them. Flow tracking follows distinctive tokens (keys, IDs), not ordinary prose.
+- **The checks are pattern matching.** Argument rules, result checks and flow tracking stop the obvious cases. One layer of percent-encoding is decoded before those checks, because a server decodes a path before it opens it. Values encoded another way, split up, reworded, or built by the server itself can still get past them. Flow tracking follows distinctive tokens (keys, IDs), not ordinary prose.
 - **A notice is advice to the model.** In the default `annotate` mode, suspicious output still reaches the model with a warning in front. Use `--results block` to withhold it.
 - **Remote servers that need a browser sign-in (OAuth)** are passed through, but the sign-in flow has not been tested through the proxy.
 - **Tested on Linux and macOS**, against the official filesystem and "everything" servers with the official MCP client. **Windows support is experimental.**

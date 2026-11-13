@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
+import { includePercentDecoded } from "./percent.js";
 
 export interface Rule {
   id: string;
@@ -132,10 +133,11 @@ export class Policy {
   evaluate(toolName: string, args: unknown): Verdict {
     const strings: string[] = [];
     collectStrings(args, strings);
+    const candidates = includePercentDecoded(strings);
     const verdict: Verdict = { denied: null, warnings: [] };
     for (const c of this.compiled) {
       if (!c.tool.test(toolName)) continue;
-      if (!strings.some((s) => c.pattern.test(s))) continue;
+      if (!candidates.some((s) => c.pattern.test(s))) continue;
       const hit = { ruleId: c.rule.id, message: c.rule.message ?? `matched rule ${c.rule.id}` };
       if ((c.rule.action ?? "deny") === "deny") {
         verdict.denied ??= hit;
