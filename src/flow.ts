@@ -18,7 +18,7 @@ import { collectText, matchForms } from "./scan.js";
  * written with a compatibility character or an invisible character is the same
  * token. When
  * a call to a *different* server carries one of those tokens in its arguments,
- * in a filesystem root, including an answer that is not a list, in a tool, resource, prompt, or template list, in the opening handshake, in any other client message, in a field beside the
+ * in a filesystem root, including an answer that is not a list and a field beside that list, in a tool, resource, prompt, or template list, in the opening handshake, in any other client message, in a field beside the
  * parameters, in the answer to a question, in a sampling reply, or in the
  * answer to any other server request, including a field beside that answer, or in
  * an object key,

@@ -354,7 +354,7 @@ export class Firewall {
         if (this.rootsIdsAwaitingAnswer.delete(id) && "result" in msg) {
           const loose = this.looseRoots(msg);
           if (loose) return loose;
-          const rewritten = this.rewriteRoots(msg);
+          const rewritten = this.foldRootsSide(msg, this.rewriteRoots(msg));
           if (rewritten) return { forward: true, send: rewritten };
         }
         if (this.elicitationIdsAwaitingAnswer.delete(id)) {
@@ -859,6 +859,79 @@ export class Firewall {
     }
     if (!changed) return null;
     return { ...msg, result: { ...result, roots: kept } };
+  }
+
+  /** A field beside the filesystem roots is still part of the answer. A credential path there still reaches the server otherwise. */
+  private foldRootsSide(msg: Json, decided: Json | null): Json | null {
+    const base = decided ?? msg;
+    const result = isObject(base.result) ? base.result : null;
+    if (!result) return decided;
+    const { server, audit } = this.opts;
+    const blocking = this.opts.mode === "block";
+    const next: Json = { ...result };
+    let changed = false;
+    for (const [key, value] of Object.entries(result)) {
+      if (key === "roots") continue;
+      const verdict = this.opts.policy.evaluate("roots/list", value);
+      for (const w of verdict.warnings) {
+        audit.alert(`WARNING root field "${key}" on "${server}" ${w.message} (rule ${w.ruleId}).`, {
+          event: "call_warning",
+          tool: key,
+          rule: w.ruleId,
+          reason: w.message,
+        });
+      }
+      if (verdict.denied && blocking) {
+        audit.alert(`DENIED root field "${key}" on "${server}": it ${verdict.denied.message} (rule ${verdict.denied.ruleId}).`, {
+          event: "call_denied",
+          tool: key,
+          rule: verdict.denied.ruleId,
+          reason: verdict.denied.message,
+          args: summarizeArgs(value),
+        });
+        delete next[key];
+        changed = true;
+        continue;
+      }
+      if (verdict.denied) {
+        audit.alert(
+          `WARNING root field "${key}" on "${server}" ${verdict.denied.message} (rule ${verdict.denied.ruleId}; warn mode, not blocked).`,
+          { event: "call_warning", tool: key, rule: verdict.denied.ruleId, reason: verdict.denied.message },
+        );
+      }
+      let dropped = false;
+      for (const hit of this.opts.flow?.check(value) ?? []) {
+        const what = hit.kind === "secret" ? "a credential" : "a value";
+        const reason = `carries ${what} that server "${hit.from}" returned ${minutes(hit.ageMs)} ago`;
+        const { action, ruleId } = this.opts.policy.evaluateFlow(hit.from, server, hit.kind);
+        const rec = { tool: key, from: hit.from, kind: hit.kind, rule: ruleId };
+        if (action === "deny" && blocking) {
+          audit.alert(`DENIED root field "${key}" on "${server}": it ${reason} (flow rule ${ruleId}).`, {
+            event: "flow_denied",
+            ...rec,
+            args: summarizeArgs(value),
+          });
+          dropped = true;
+          break;
+        }
+        if (action === "log") {
+          audit.record({ event: "flow", ...rec });
+        } else {
+          const suffix = action === "deny" ? " (warn mode, not blocked)" : "";
+          audit.alert(`WARNING root field "${key}" on "${server}" ${reason}${suffix}.`, {
+            event: "flow",
+            ...rec,
+            warned: true,
+          });
+        }
+      }
+      if (dropped) {
+        delete next[key];
+        changed = true;
+      }
+    }
+    if (!changed) return decided;
+    return { ...base, result: next };
   }
 
   // ---------------------------------------------------------------- server → client
