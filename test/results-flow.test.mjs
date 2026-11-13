@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
+import { summarizeArgs } from "../dist/audit.js";
 import { extractFingerprints } from "../dist/flow.js";
 import { scanResult } from "../dist/scan.js";
 import { ECHO, SEND, sandbox, session } from "./helpers.mjs";
@@ -263,6 +264,16 @@ test("fingerprints: secrets and long ids are found, plain words are not", () => 
   assert.deepEqual(extractFingerprints({ text: "hello world" }), { secrets: [], values: [] });
   const encoded = FAKE_TOKEN.replace("a", "%61");
   assert.deepEqual(extractFingerprints(encoded).secrets, extractFingerprints(FAKE_TOKEN).secrets);
+});
+
+test("an encoded credential is removed from the log, and ordinary encoding is kept", () => {
+  const encoded = FAKE_TOKEN.replace("a", "%61");
+  const logged = JSON.stringify(summarizeArgs({ body: `posting ${encoded}` }));
+  assert.equal(logged.includes(encoded), false);
+  assert.equal(logged.includes(FAKE_TOKEN), false);
+  assert.match(logged, /\[credential removed\]/);
+  assert.deepEqual(summarizeArgs({ body: `posting ${FAKE_TOKEN}` }), { body: "posting [credential removed]" });
+  assert.deepEqual(summarizeArgs({ q: "notes%20copy.md" }), { q: "notes%20copy.md" });
 });
 
 test("flow: a credential returned by one server and sent to another is reported", async () => {

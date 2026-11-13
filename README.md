@@ -199,7 +199,7 @@ With no flow rules, a credential moving between servers is reported and other va
 ## How it works
 
 - **Pins** live in `~/.toolwarden/pins/<server>.json`: a SHA-256 hash of each tool definition, with keys sorted so reordering does not count as a change. The first listing may span pages. toolwarden keeps trusting that listing only while each request continues the cursor the server just returned, and for at most 32 pages. A different listing, or a page past that bound, is reviewed like any later change. A call to a tool that was never listed is blocked.
-- **The audit log** is `~/.toolwarden/audit.log`, one JSON object per line. Credential-shaped values in call arguments are removed before they are written.
+- **The audit log** is `~/.toolwarden/audit.log`, one JSON object per line. Credential-shaped values in call arguments are removed before they are written, including a value hidden by one layer of percent-encoding.
 - **Flow tracking** stores only hashes of the values a server returned, for 30 minutes, in `~/.toolwarden/flow/`.
 - Files are created readable only by you.
 
