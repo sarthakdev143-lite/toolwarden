@@ -39,7 +39,7 @@ try to reach the dashboard or the HTTP proxy.
 | A new tool appears later | It is quarantined until approved | Strong |
 | The model is talked into reading credentials | Tool calls, resource URIs and prompt arguments that reference credential locations are denied | Partial: pattern matching on arguments |
 | A tool, resource or prompt result carries instructions | Results are scanned; a notice is added, or the result is withheld | Partial: pattern matching on text |
-| A secret read through one server is sent out through another | Values returned by a server are fingerprinted and recognized in calls to other servers | Partial: distinctive tokens only |
+| A secret read through one server is sent out through another | Values returned by a server are fingerprinted and recognized in calls, resource reads, and prompt arguments to other servers | Partial: distinctive tokens only |
 | A web page calls the dashboard or proxy | Local-only listening, Host and Origin checks, a random token for the dashboard, a strict content security policy | Strong |
 | A server's text attacks the dashboard itself | Server-supplied text is only ever written as text, never as HTML | Strong |
 

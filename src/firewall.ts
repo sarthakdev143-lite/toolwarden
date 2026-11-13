@@ -43,6 +43,11 @@ function minutes(ms: number): string {
   return m === 1 ? "1 minute" : `${m} minutes`;
 }
 
+function visibleLabel(label: string): string {
+  const safe = summarizeArgs(label);
+  return typeof safe === "string" ? safe : "[truncated]";
+}
+
 /** The result of inspecting a message from the client (the AI app). */
 export interface ClientDecision {
   /** Pass the message on to the server. */
@@ -118,9 +123,12 @@ export class Firewall {
             ? params.name
             : "prompt";
       const kind = msg.method === "resources/read" ? "resource" : "prompt";
-      const denied = this.policyDecision(msg, label, kind, params);
+      const shown = visibleLabel(label);
+      const denied = this.policyDecision(msg, shown, kind, params);
       if (denied) return denied;
-      this.pendingCalls.set(idKey(scope, msg.id), { label, kind });
+      const flowed = this.flowDecision(msg, shown, kind, params);
+      if (flowed) return flowed;
+      this.pendingCalls.set(idKey(scope, msg.id), { label: shown, kind });
       return { forward: true };
     }
 
@@ -164,6 +172,42 @@ export class Firewall {
       `If the user really wants this, they need to change the toolwarden policy themselves.`;
     if (!("id" in msg)) return { forward: false };
     return { forward: false, reply: { jsonrpc: "2.0", id: msg.id, result: this.placeNotice({}, kind, text, true) } };
+  }
+
+  private flowDecision(msg: Json, label: string, kind: "tool" | "resource" | "prompt", args: unknown): ClientDecision | null {
+    const { server, audit } = this.opts;
+    const blocking = this.opts.mode === "block";
+    const noun = kind === "tool" ? "call" : "request";
+    for (const hit of this.opts.flow?.check(args) ?? []) {
+      const what = hit.kind === "secret" ? "a credential" : "a value";
+      const reason = `carries ${what} that server "${hit.from}" returned ${minutes(hit.ageMs)} ago`;
+      const { action, ruleId } = this.opts.policy.evaluateFlow(hit.from, server, hit.kind);
+      const rec = { tool: label, from: hit.from, kind: hit.kind, rule: ruleId };
+      if (action === "deny" && blocking) {
+        audit.alert(`DENIED ${noun} to "${label}" on "${server}": it ${reason} (flow rule ${ruleId}).`, {
+          event: "flow_denied",
+          ...rec,
+          args: summarizeArgs(args),
+        });
+        const text =
+          `Blocked by toolwarden policy: this ${noun} ${reason}, and the user's policy does not allow ` +
+          `data to move from "${hit.from}" to "${server}" (rule "${ruleId}").`;
+        if (kind === "tool") return { forward: false, reply: this.errorReply(msg, text) };
+        if (!("id" in msg)) return { forward: false };
+        return { forward: false, reply: { jsonrpc: "2.0", id: msg.id, result: this.placeNotice({}, kind, text, true) } };
+      }
+      if (action === "log") {
+        audit.record({ event: "flow", ...rec });
+      } else {
+        const suffix = action === "deny" ? " (warn mode, not blocked)" : "";
+        audit.alert(`WARNING ${noun} to "${label}" on "${server}" ${reason}${suffix}.`, {
+          event: "flow",
+          ...rec,
+          warned: true,
+        });
+      }
+    }
+    return null;
   }
 
   private checkCall(msg: Json): ClientDecision {
@@ -245,34 +289,8 @@ export class Firewall {
       );
     }
 
-    // 3. Do the arguments carry something another server returned recently?
-    for (const hit of this.opts.flow?.check(args) ?? []) {
-      const what = hit.kind === "secret" ? "a credential" : "a value";
-      const reason = `carries ${what} that server "${hit.from}" returned ${minutes(hit.ageMs)} ago`;
-      const { action, ruleId } = this.opts.policy.evaluateFlow(hit.from, server, hit.kind);
-      const rec = { tool: name, from: hit.from, kind: hit.kind, rule: ruleId };
-      if (action === "deny" && blocking) {
-        audit.alert(`DENIED call to "${name}" on "${server}": it ${reason} (flow rule ${ruleId}).`, {
-          event: "flow_denied",
-          ...rec,
-          args: summarizeArgs(args),
-        });
-        return {
-          forward: false,
-          reply: this.errorReply(
-            msg,
-            `Blocked by toolwarden policy: this call ${reason}, and the user's policy does not allow ` +
-              `data to move from "${hit.from}" to "${server}" (rule "${ruleId}").`,
-          ),
-        };
-      }
-      if (action === "log") {
-        audit.record({ event: "flow", ...rec });
-      } else {
-        const suffix = action === "deny" ? " (warn mode, not blocked)" : "";
-        audit.alert(`WARNING call to "${name}" on "${server}" ${reason}${suffix}.`, { event: "flow", ...rec, warned: true });
-      }
-    }
+    const flowed = this.flowDecision(msg, name, "tool", args);
+    if (flowed) return flowed;
 
     audit.record({ event: "call", tool: name, args: summarizeArgs(args) });
     return { forward: true };

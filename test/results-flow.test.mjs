@@ -158,6 +158,65 @@ test("flow: a credential returned by one server and sent to another is reported"
   assert.match(logText, /\[credential removed\]/);
 });
 
+test("flow: a credential returned by one server and read back through another is reported", async () => {
+  const box = sandbox([ECHO]);
+  const vault = session(box, [], "vault");
+  try {
+    await vault.listTools();
+    await vault.call("echo", { echo: `your token is ${FAKE_TOKEN}` });
+    const same = await vault.request("resources/read", { uri: `file://notes/${FAKE_TOKEN}`, text: "vault copy" });
+    assert.equal(same.result.contents[0].text, "vault copy");
+  } finally {
+    await vault.close();
+  }
+  assert.doesNotMatch(vault.stderr(), /returned \d+ minute/);
+
+  const web = session(box, [], "web");
+  try {
+    await web.listTools();
+    const read = await web.request("resources/read", { uri: `file://notes/${FAKE_TOKEN}`, text: "web copy" });
+    assert.equal(read.result.contents[0].text, "web copy", "by default a flow is reported, not blocked");
+    const prompt = await web.request("prompts/get", { name: "summarize", arguments: { note: FAKE_TOKEN }, text: "prompt copy" });
+    assert.equal(prompt.result.messages[0].content.text, "prompt copy");
+  } finally {
+    await web.close();
+  }
+
+  assert.match(web.stderr(), /WARNING request to "file:\/\/notes\/\[credential removed\]" on "web" carries a credential that server "vault" returned/);
+  assert.match(web.stderr(), /WARNING request to "summarize" on "web" carries a credential that server "vault" returned/);
+  const logText = JSON.stringify(box.audit());
+  assert.ok(!logText.includes(FAKE_TOKEN), "the audit log never stores the credential itself");
+});
+
+test("flow: a policy rule can deny a resource read that carries data from another server", async () => {
+  const box = sandbox([ECHO]);
+  const policyFile = join(box.dir, "policy.json");
+  writeFileSync(policyFile, JSON.stringify({ flows: [{ id: "vault-stays-put", from: "vault", to: "*", action: "deny" }] }));
+
+  const vault = session(box, ["--policy", policyFile], "vault");
+  try {
+    await vault.listTools();
+    await vault.call("echo", { echo: `order created: ${ORDER_ID}` });
+  } finally {
+    await vault.close();
+  }
+  const before = box.serverCalls().length;
+
+  const web = session(box, ["--policy", policyFile], "web");
+  try {
+    await web.listTools();
+    const denied = await web.request("resources/read", { uri: `file://notes/${ORDER_ID}`, text: "LEAKED BODY" });
+    assert.match(denied.result.contents[0].text, /does not allow data to move from "vault" to "web"/);
+    assert.doesNotMatch(JSON.stringify(denied.result), /LEAKED BODY/);
+    assert.doesNotMatch(JSON.stringify(denied.result), new RegExp(ORDER_ID));
+  } finally {
+    await web.close();
+  }
+
+  assert.equal(box.serverCalls().length, before, "the resource read never reached the server");
+  assert.ok(box.audit().some((r) => r.event === "flow_denied" && r.rule === "vault-stays-put"));
+});
+
 test("flow: a policy rule can deny data moving between two servers", async () => {
   const box = sandbox([ECHO, SEND]);
   const policyFile = join(box.dir, "policy.json");
