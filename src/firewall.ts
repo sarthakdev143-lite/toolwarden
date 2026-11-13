@@ -311,13 +311,22 @@ export class Firewall {
       return { forward: true };
     }
 
+    if (msg.method === "completion/complete" && "id" in msg) {
+      const params = isObject(msg.params) ? msg.params : {};
+      const argument = isObject(params.argument) ? params.argument : {};
+      const name = typeof argument.name === "string" && argument.name !== "" ? argument.name : "completion";
+      const denied = this.policyDecision(msg, visibleLabel(name), "completion", params);
+      if (denied) return denied;
+      return { forward: true };
+    }
+
     return { forward: true };
   }
 
   private policyDecision(
     msg: Json,
     label: string,
-    kind: "resource" | "prompt",
+    kind: "resource" | "prompt" | "completion",
     args: unknown,
   ): ClientDecision | null {
     const { server, audit } = this.opts;
@@ -350,6 +359,9 @@ export class Firewall {
       `Blocked by toolwarden policy: this request ${d.message} (rule "${d.ruleId}"). ` +
       `If the user really wants this, they need to change the toolwarden policy themselves.`;
     if (!("id" in msg)) return { forward: false };
+    if (kind === "completion") {
+      return { forward: false, reply: { jsonrpc: "2.0", id: msg.id, error: { code: -32000, message: text } } };
+    }
     return { forward: false, reply: { jsonrpc: "2.0", id: msg.id, result: this.placeNotice({}, kind, text, true) } };
   }
 

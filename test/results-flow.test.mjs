@@ -668,6 +668,32 @@ test("a percent-encoded credential path is denied the same way as the plain path
   );
 });
 
+test("a completion argument that names credentials never reaches the server", async () => {
+  const box = sandbox([ECHO]);
+  const s = session(box);
+  try {
+    const ssh = await s.request("completion/complete", {
+      ref: { type: "ref/prompt", name: "summarize" },
+      argument: { name: "path", value: "file:///home/me/.ssh/id_rsa" },
+    });
+    assert.equal(ssh.error.code, -32000);
+    assert.match(ssh.error.message, /Blocked by toolwarden policy/);
+    assert.doesNotMatch(JSON.stringify(ssh), /id_rsa/);
+
+    const ok = await s.request("completion/complete", {
+      ref: { type: "ref/resource", uri: "file:///{path}" },
+      argument: { name: "path", value: "file:///home/me/project/README.md" },
+    });
+    assert.deepEqual(ok.result.completion.values, ["file:///home/me/project/README.md-done"]);
+  } finally {
+    await s.close();
+  }
+  assert.deepEqual(
+    box.serverCalls().map((c) => c.params?.argument?.value),
+    ["file:///home/me/project/README.md"],
+  );
+});
+
 test("a resource read or prompt argument that names credentials never reaches the server", async () => {
   const box = sandbox([ECHO]);
   const s = session(box);
