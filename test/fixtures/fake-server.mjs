@@ -49,6 +49,9 @@ function handle(msg) {
         serverInfo: { name: "fake", version: "1.0.0" },
       },
     });
+  } else if (msg.method === "test/sampling") {
+    send({ jsonrpc: "2.0", id: 9001, method: "sampling/createMessage", params: msg.params });
+    send({ jsonrpc: "2.0", id: msg.id, result: { ok: true } });
   } else if (msg.method === "tools/list") {
     send({ jsonrpc: "2.0", id: msg.id, result: listResult(msg.params?.cursor) });
   } else if (msg.method === "resources/list") {
