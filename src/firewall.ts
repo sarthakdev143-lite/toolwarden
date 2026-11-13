@@ -981,9 +981,9 @@ export class Firewall {
     );
   }
 
-  /** A result or error on a server request or notification is still part of that message. An instruction there is still shown otherwise. */
+  /** A result or error on a server request or notification is still part of that message, even when the method is not a string. An instruction there is still shown otherwise. */
   private foldMethodResult(msg: Json, decided: Json | null): Json | null {
-    if (typeof msg.method !== "string") return decided;
+    if (!("method" in msg)) return decided;
     const body: Json = {};
     if ("result" in msg) body.result = msg.result;
     if ("error" in msg) body.error = msg.error;
@@ -993,6 +993,8 @@ export class Firewall {
     let next = decided;
     for (const field of ["result", "error"] as const) {
       if (!(field in body)) continue;
+      const carrier = next ?? msg;
+      if (carrier[field] !== msg[field]) continue;
       const findings = scanResult(body[field]);
       if (findings.length === 0) continue;
       const reasons = findings.map((f) => f.message).join("; ");
@@ -1105,9 +1107,9 @@ export class Firewall {
     return next;
   }
 
-  /** The method name is part of the server message. An instruction there is still shown otherwise, and a credential there is still forgotten otherwise. */
+  /** The method is part of the server message, even when it is not a string. An instruction there is still shown otherwise, and a credential there is still forgotten otherwise. */
   private foldMethod(msg: Json, decided: Json | null): Json | null {
-    if (typeof msg.method !== "string") return decided;
+    if (!("method" in msg)) return decided;
     this.opts.flow?.record(msg.method);
     if (this.resultMode === "off") return decided;
     const findings = scanResult(msg.method);
@@ -1139,7 +1141,11 @@ export class Firewall {
       if (this.resultMode !== "annotate") return decided;
     }
     const next: Json = { ...(decided ?? msg) };
-    next.method = withhold ? text : text + "\n\n" + msg.method;
+    next.method = withhold
+      ? text
+      : typeof msg.method === "string"
+        ? text + "\n\n" + msg.method
+        : prefixSuspicious(msg.method, text);
     return next;
   }
 
@@ -1209,7 +1215,8 @@ export class Firewall {
       if ("id" in msg) this.unknownRequestsAwaitingAnswer.set(requestId(msg.id), msg.method);
       return this.checkNotice(msg);
     }
-    if ("method" in msg || !("id" in msg)) return null;
+    // A method that is not a string is still a server message. Its parameters and any reply are still checked.
+    if (!("id" in msg)) return "method" in msg ? this.checkNotice(msg) : null;
     const key = idKey(scope, msg.id);
 
     if (this.pendingInits.has(key)) {
@@ -1280,6 +1287,7 @@ export class Firewall {
       if (isObject(msg.result)) return this.checkOtherReply(paired ?? msg, msg.result, subscription, "result") ?? paired;
       if (isObject(msg.error)) return this.checkOtherReply(msg, msg.error, subscription, "error");
     }
+    if ("method" in msg) return this.checkNotice(msg);
     return null;
   }
 
