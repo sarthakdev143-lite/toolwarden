@@ -90,6 +90,14 @@ function handle(msg) {
       id: msg.id,
       result: { messages: [{ role: "user", content: { type: "text", text } }] },
     });
+  } else if (msg.method === "completion/complete") {
+    if (callsFile) appendFileSync(callsFile, JSON.stringify({ method: msg.method, params: msg.params }) + "\n");
+    const value = typeof msg.params?.argument?.value === "string" ? msg.params.argument.value : "";
+    send({
+      jsonrpc: "2.0",
+      id: msg.id,
+      result: { completion: { values: value === "" ? [] : [value + "-done"], hasMore: false } },
+    });
   } else if (msg.method === "tools/call") {
     if (callsFile) appendFileSync(callsFile, JSON.stringify(msg.params) + "\n");
     if (typeof msg.params?.arguments?.fail === "string") {
