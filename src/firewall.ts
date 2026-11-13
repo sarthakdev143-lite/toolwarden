@@ -1650,7 +1650,7 @@ export class Firewall {
     return { ...base, result: nextResult };
   }
 
-  /** A list item, a definition reply, a field beside a list, a sampling system prompt, a sampling message, any other field on a sampling request, the method on a server message, the protocol version, a value that is not a JSON-RPC object, the id of a server message, a field beside a server message, parameters that are not an object, a result or an error on a server request or notification, a progress token, an elicitation question, a resource update, any other server notice, a cancellation id, a prompt result, including one that is not an object, the uri of a returned resource, including one that is not a list, a field beside that resource, or a field beside tool output, including when that output is not a list, or a field beside an embedded resource, is still part of what the model reads. A credential path there is still shown otherwise. */
+  /** A list item, a definition reply, a field beside a list, a sampling system prompt, a sampling message, any other field on a sampling request, the method on a server message, the protocol version, a value that is not a JSON-RPC object, the id of a server message, a field beside a server message, parameters that are not an object, a result or an error on a server request or notification, a progress token, an elicitation question, a resource update, any other server notice, a cancellation id, a prompt result, including one that is not an object, the uri of a returned resource, including one that is not a list, a field beside that resource, or a field beside tool output, including when that output is not a list, or a field beside an embedded resource, including when that resource is a list, is still part of what the model reads. A credential path there is still shown otherwise. */
   private warnLooseDefinition(item: unknown, label: string): void {
     const shown = scanResult(item);
     const findings = scanTool(item).filter((finding) => !shown.some((have) => have.id === finding.id));
@@ -2059,7 +2059,7 @@ export class Firewall {
     return { ...msg, params: nextParams };
   }
 
-  /** A prompt result is text the model follows. An instruction there is still shown otherwise. A credential path there is still shown otherwise. The uri on a returned resource says which resource the text came from, including when the resource is not a list. A credential path there is still shown otherwise. A field beside that resource, other than the document text, is still part of what the model reads. A credential path there is still shown otherwise. A field beside tool output, other than the content the tool returned, is still part of what the model reads, including when that output is not a list. A credential path there is still shown otherwise. A field beside an embedded resource, other than its document, is still part of what the model reads. A credential path there is still shown otherwise. */
+  /** A prompt result is text the model follows. An instruction there is still shown otherwise. A credential path there is still shown otherwise. The uri on a returned resource says which resource the text came from, including when the resource is not a list. A credential path there is still shown otherwise. A field beside that resource, other than the document text, is still part of what the model reads. A credential path there is still shown otherwise. A field beside tool output, other than the content the tool returned, is still part of what the model reads, including when that output is not a list. A credential path there is still shown otherwise. A field beside an embedded resource, other than its document, is still part of what the model reads, including when that resource is a list. A credential path there is still shown otherwise. */
   private checkResult(msg: Json, result: Json, label: string, kind: "tool" | "resource" | "prompt"): Json | null {
     const { server, audit } = this.opts;
     this.opts.flow?.record(result);
@@ -2078,13 +2078,19 @@ export class Firewall {
           for (const [key, value] of Object.entries(item)) {
             if (key === "text" || key === "data" || key === "blob" || key === "uri") continue;
             if (key === "resource") {
-              if (!isObject(value)) continue;
-              const nested: Json = {};
-              for (const [inner, innerValue] of Object.entries(value)) {
-                if (inner === "uri" || inner === "text" || inner === "blob") continue;
-                nested[inner] = innerValue;
+              const resources = Array.isArray(value) ? value : isObject(value) ? [value] : null;
+              if (resources === null) continue;
+              const nested: Json[] = [];
+              for (const resource of resources) {
+                if (!isObject(resource)) continue;
+                const fields: Json = {};
+                for (const [inner, innerValue] of Object.entries(resource)) {
+                  if (inner === "uri" || inner === "text" || inner === "blob") continue;
+                  fields[inner] = innerValue;
+                }
+                if (Object.keys(fields).length > 0) nested.push(fields);
               }
-              if (Object.keys(nested).length > 0) itemSide.resource = nested;
+              if (nested.length > 0) itemSide.resource = isObject(value) ? nested[0] : nested;
               continue;
             }
             itemSide[key] = value;
