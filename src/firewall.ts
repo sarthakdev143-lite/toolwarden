@@ -48,6 +48,16 @@ function visibleLabel(label: string): string {
   return typeof safe === "string" ? safe : "[truncated]";
 }
 
+function fieldsBesideToolName(params: Json): unknown {
+  const extras: Json = {};
+  for (const [key, value] of Object.entries(params)) {
+    if (key === "name" || key === "arguments") continue;
+    extras[key] = value;
+  }
+  if (Object.keys(extras).length === 0) return params.arguments;
+  return { arguments: params.arguments, ...extras };
+}
+
 /** The result of inspecting a message from the client (the AI app). */
 export interface ClientDecision {
   /** Pass the message on to the server. */
@@ -220,7 +230,7 @@ export class Firewall {
     const params = isObject(msg.params) ? msg.params : {};
     const name = params.name;
     if (typeof name !== "string") return { forward: true };
-    const args = params.arguments;
+    const args = fieldsBesideToolName(params);
     const { server, audit } = this.opts;
     const blocking = this.opts.mode === "block";
 

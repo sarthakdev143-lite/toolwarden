@@ -276,6 +276,32 @@ test("an encoded credential is removed from the log, and ordinary encoding is ke
   assert.deepEqual(summarizeArgs({ q: "notes%20copy.md" }), { q: "notes%20copy.md" });
 });
 
+test("flow: a credential carried outside the arguments object is reported", async () => {
+  const box = sandbox([ECHO, SEND]);
+  const vault = session(box, [], "vault");
+  try {
+    await vault.listTools();
+    await vault.call("echo", { echo: `your token is ${FAKE_TOKEN}` });
+  } finally {
+    await vault.close();
+  }
+
+  const web = session(box, [], "web");
+  try {
+    await web.listTools();
+    const res = await web.request("tools/call", {
+      name: "send",
+      arguments: { body: "hello" },
+      _meta: { note: FAKE_TOKEN },
+    });
+    assert.equal(res.result.isError, false, "by default a flow is reported, not blocked");
+  } finally {
+    await web.close();
+  }
+  assert.match(web.stderr(), /WARNING call to "send" on "web" carries a credential that server "vault" returned/);
+  assert.equal(JSON.stringify(box.audit()).includes(FAKE_TOKEN), false);
+});
+
 test("flow: a credential returned by one server and sent to another is reported", async () => {
   const box = sandbox([ECHO, SEND]);
   const vault = session(box, [], "vault");

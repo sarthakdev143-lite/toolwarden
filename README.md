@@ -183,7 +183,7 @@ Put a `policy.json` in `~/.toolwarden/`:
 }
 ```
 
-**Argument rules** (`rules`): a regular expression tested against every string in a tool call's arguments.
+**Argument rules** (`rules`): a regular expression tested against every string in a tool call, other than the tool name. That includes `arguments`, `_meta`, and any other field sent beside them.
 
 - `tool` is a glob over the tool name (default `*`).
 - `action` is `deny` (default) or `warn`.

@@ -346,6 +346,39 @@ test("policy: a call that reaches for credentials is denied and never reaches th
   assert.deepEqual(box.serverCalls().map((c) => c.arguments.path), ["/home/me/project/src/environment.ts"]);
 });
 
+test("policy: a credential outside the arguments object never reaches the server", async () => {
+  const box = sandbox([READ_FILE]);
+  const s = session(box);
+  try {
+    await s.listTools();
+    const meta = await s.request("tools/call", {
+      name: "read_file",
+      arguments: { path: "notes.txt" },
+      _meta: { note: "/home/me/.ssh/id_rsa" },
+    });
+    assert.equal(meta.result.isError, true);
+    assert.match(meta.result.content[0].text, /Blocked by toolwarden policy/);
+
+    const sibling = await s.request("tools/call", {
+      name: "read_file",
+      arguments: { path: "notes.txt" },
+      path: "/home/me/.env",
+    });
+    assert.equal(sibling.result.isError, true);
+    assert.match(sibling.result.content[0].text, /Blocked by toolwarden policy/);
+
+    const ok = await s.request("tools/call", {
+      name: "read_file",
+      arguments: { path: "notes.txt" },
+      _meta: { progressToken: 7 },
+    });
+    assert.equal(ok.result.isError, false);
+  } finally {
+    await s.close();
+  }
+  assert.deepEqual(box.serverCalls().map((c) => c.arguments.path), ["notes.txt"]);
+});
+
 test("policy: custom rules from a file apply, and --no-default-rules turns the built-ins off", async () => {
   const box = sandbox([READ_FILE]);
   const policyFile = join(box.dir, "policy.json");
