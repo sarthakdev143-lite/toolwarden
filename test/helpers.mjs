@@ -85,6 +85,15 @@ export function connect(child) {
     call(name, args) {
       return this.request("tools/call", { name, arguments: args });
     },
+    wait(id) {
+      return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error(`no message ${id} within 5s`)), 5000);
+        waiting.set(id, (msg) => {
+          clearTimeout(timer);
+          resolve(msg);
+        });
+      });
+    },
     stderr: () => stderr,
     close() {
       return new Promise((resolve) => {
