@@ -671,6 +671,7 @@ export class Firewall {
   }
 
   private checkCompletion(msg: Json, result: Json, label: string): Json | null {
+    this.opts.flow?.record(result);
     if (this.resultMode === "off") return null;
     const findings = scanResult(result);
     if (findings.length === 0) return null;

@@ -857,6 +857,35 @@ test("an encoded credential is removed from the log, and ordinary encoding is ke
   assert.deepEqual(summarizeArgs({ body: png }), { body: png });
 });
 
+test("flow: a credential in a completion suggestion is recognized when another server is asked to send it", async () => {
+  const box = sandbox([ECHO, SEND]);
+  const vault = session(box, ["--results", "off"], "vault");
+  try {
+    await vault.listTools();
+    const shown = await vault.request("completion/complete", {
+      ref: { type: "ref/prompt", name: "summarize" },
+      argument: { name: "note", value: "token" },
+      suggestions: [`your token is ${FAKE_TOKEN}`],
+    });
+    assert.deepEqual(shown.result.completion.values, [`your token is ${FAKE_TOKEN}`]);
+    await vault.call("send", { body: FAKE_TOKEN });
+  } finally {
+    await vault.close();
+  }
+  assert.doesNotMatch(vault.stderr(), /returned \d+ minute/);
+
+  const web = session(box, [], "web");
+  try {
+    await web.listTools();
+    const res = await web.call("send", { body: `posting ${FAKE_TOKEN}` });
+    assert.equal(res.result.isError, false, "by default a flow is reported, not blocked");
+  } finally {
+    await web.close();
+  }
+  assert.match(web.stderr(), /WARNING call to "send" on "web" carries a credential that server "vault" returned/);
+  assert.equal(JSON.stringify(box.audit()).includes(FAKE_TOKEN), false);
+});
+
 test("flow: a credential sent in a completion argument to another server is reported", async () => {
   const box = sandbox([ECHO, SEND]);
   const vault = session(box, [], "vault");
