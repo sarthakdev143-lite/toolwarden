@@ -253,15 +253,15 @@ function handle(msg) {
       return;
     }
     const text = typeof msg.params?.text === "string" ? msg.params.text : "a plain document";
-    send({ jsonrpc: "2.0", id: msg.id, result: { contents: [{ uri, mimeType: "text/plain", text }] } });
+    const result = { contents: [{ uri, mimeType: "text/plain", text }] };
+    if (msg.params && "note" in msg.params) result.note = msg.params.note;
+    send({ jsonrpc: "2.0", id: msg.id, result });
   } else if (msg.method === "prompts/get") {
     if (callsFile) appendFileSync(callsFile, JSON.stringify({ method: msg.method, params: msg.params }) + "\n");
     const text = typeof msg.params?.text === "string" ? msg.params.text : "a plain prompt";
-    send({
-      jsonrpc: "2.0",
-      id: msg.id,
-      result: { messages: [{ role: "user", content: { type: "text", text } }] },
-    });
+    const result = { messages: [{ role: "user", content: { type: "text", text } }] };
+    if (msg.params && "note" in msg.params) result.note = msg.params.note;
+    send({ jsonrpc: "2.0", id: msg.id, result });
   } else if (msg.method === "completion/complete") {
     if (callsFile) appendFileSync(callsFile, JSON.stringify({ method: msg.method, params: msg.params }) + "\n");
     if (typeof msg.params?.fail === "string") {
