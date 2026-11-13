@@ -6,7 +6,7 @@ export interface Rule {
   id: string;
   /** Glob over the tool name. "*" matches anything. Defaults to "*". */
   tool?: string;
-  /** Regular expression (case-insensitive) tested against every string in the call, other than a tool call's name, including text stored in a base64 blob or in image and audio data. */
+  /** Regular expression (case-insensitive) tested against every string in the call, other than a tool call's name, including object keys and text stored in a base64 blob or in image and audio data. */
   pattern: string;
   /** "deny" blocks the call. "warn" lets it through and records a warning. Defaults to "deny". */
   action?: "deny" | "warn";
