@@ -592,6 +592,7 @@ export class Firewall {
   private checkCatalog(result: Json, kind: CatalogKind): void {
     const items = catalogItems(result, kind);
     if (!Array.isArray(items)) return;
+    this.opts.flow?.record(items);
     const { server, audit } = this.opts;
     for (const item of items) {
       if (!isObject(item)) continue;

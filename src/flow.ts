@@ -10,11 +10,11 @@ import { collectText } from "./scan.js";
  *
  * Each wrapped server runs in its own toolwarden process, so they share what
  * they have seen through small files in the state directory. When a server
- * shows a tool definition, sends an introduction, or returns text, we remember
- * fingerprints (hashes, never the values) of the distinctive tokens in it.
- * When a call to a *different* server carries one of those tokens in its
- * arguments, that is a data flow between servers: the pattern behind "read a
- * secret with one tool, send it out with another".
+ * shows a tool definition, a catalog description, or an introduction, or returns
+ * text, we remember fingerprints (hashes, never the values) of the distinctive
+ * tokens in it. When a call to a *different* server carries one of those
+ * tokens in its arguments, that is a data flow between servers: the pattern
+ * behind "read a secret with one tool, send it out with another".
  */
 
 export type FlowKind = "secret" | "value";
