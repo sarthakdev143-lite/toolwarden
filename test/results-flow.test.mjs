@@ -1648,6 +1648,45 @@ test("a client message the firewall does not already check never carries a crede
   assert.match(warning.stderr(), /warn mode, not blocked/);
 });
 
+test("a credential path in a method name never reaches the server", async () => {
+  const box = sandbox([ECHO]);
+  const s = session(box);
+  try {
+    await s.listTools();
+    for (const method of [
+      "read file:///home/me/.ssh/id_rsa",
+      "read file:///home/me/%2essh/%69d_rsa",
+      "read\nfile:///home/me/.ssh/config",
+    ]) {
+      const hidden = await s.request(method, { note: "hello" });
+      assert.equal(hidden.error.code, -32000, method);
+      assert.match(hidden.error.message, /Blocked by toolwarden policy/);
+      assert.doesNotMatch(JSON.stringify(hidden), /id_rsa|%2essh|\.ssh/);
+    }
+    s.send({ jsonrpc: "2.0", method: "read file:///home/me/.ssh/id_ed25519", params: { note: "quiet" } });
+    const ok = await s.request("ping", { note: "hello" });
+    assert.equal(ok.error.code, -32601);
+    assert.equal(ok.error.message, "Method not found");
+  } finally {
+    await s.close();
+  }
+  const calls = JSON.stringify(box.serverCalls());
+  assert.doesNotMatch(calls, /id_rsa|%2essh|\.ssh|id_ed25519/);
+  assert.match(calls, /"method":"ping"/);
+  assert.match(s.stderr(), /DENIED request/);
+
+  const warning = session(box, ["--mode", "warn"]);
+  try {
+    await warning.listTools();
+    const kept = await warning.request("read file:///home/me/.ssh/id_rsa", {});
+    assert.equal(kept.error.code, -32601);
+  } finally {
+    await warning.close();
+  }
+  assert.match(warning.stderr(), /warn mode, not blocked/);
+  assert.match(JSON.stringify(box.serverCalls()), /id_rsa/);
+});
+
 test("the reply to a resource subscription gets a notice before it is shown", async () => {
   const box = sandbox([ECHO]);
   const s = session(box);

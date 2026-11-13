@@ -508,10 +508,11 @@ export class Firewall {
     return null;
   }
 
+  /** Policy and flow for a client message this firewall does not handle specially. The method name is part of that message: a credential path there still reaches the server otherwise. */
   private checkUnhandled(msg: Json): ClientDecision {
     const body: Json = {};
     for (const [key, value] of Object.entries(msg)) {
-      if (key === "jsonrpc" || key === "id" || key === "method") continue;
+      if (key === "jsonrpc" || key === "id") continue;
       body[key] = value;
     }
     const label = visibleLabel(typeof msg.method === "string" ? msg.method : "request");
