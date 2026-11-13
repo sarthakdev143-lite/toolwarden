@@ -1650,8 +1650,29 @@ export class Firewall {
     }
   }
 
+  /** The server's introduction is a definition the model reads. A credential path there is still shown otherwise. */
+  private warnIntroduction(result: Json): void {
+    const shown = scanResult(result);
+    const findings = scanTool(result).filter((finding) => !shown.some((have) => have.id === finding.id));
+    if (findings.length === 0) return;
+    const { server, audit } = this.opts;
+    const hash = hashTool(result);
+    for (const f of findings) {
+      const alertKey = "introduction:" + hash + ":" + f.id;
+      if (this.alerted.has(alertKey)) continue;
+      this.alerted.add(alertKey);
+      audit.alert(`WARNING: the introduction on "${server}" ${f.message}. Read it before trusting it.`, {
+        event: "definition_warning",
+        tool: "initialize",
+        check: f.id,
+        reason: f.message,
+      });
+    }
+  }
+
   private checkInstructions(msg: Json, result: Json): Json | null {
     this.opts.flow?.record(result);
+    this.warnIntroduction(result);
     if (this.resultMode === "off") return null;
     const findings = scanResult(result);
     if (findings.length === 0) return null;
