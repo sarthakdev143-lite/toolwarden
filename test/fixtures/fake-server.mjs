@@ -353,7 +353,7 @@ function handle(msg) {
       const contentNote = msg.params.contentNote;
       item.note = typeof contentNote === "string" ? planted(contentNote) : contentNote;
     }
-    const result = { contents: msg.params?.looseContents ? item : [item] };
+    const result = { contents: msg.params?.itemList ? [[item]] : msg.params?.looseContents ? item : [item] };
     if (msg.params && "note" in msg.params) {
       const note = msg.params.note;
       result.note = typeof note === "string" ? planted(note) : note;
