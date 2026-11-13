@@ -9,7 +9,7 @@ import { collectText, matchForms } from "./scan.js";
  *
  * Each wrapped server runs in its own toolwarden process, so they share what
  * they have seen through small files in the state directory. When a server
- * shows a tool definition, including one whose name is not a string, a catalog description, an introduction, including a credential path, a progress update, including its token, which is left unchanged so the update still matches, including a credential path in that token, a sampling request, including a credential path in its system prompt and in a message the model is asked to answer, a question the server asks, including a credential path, a completion
+ * shows a tool definition, including one whose name is not a string, a catalog description, an introduction, including a credential path, a progress update, including its token, which is left unchanged so the update still matches, including a credential path in that token, a sampling request, including a credential path in its system prompt and in a message the model is asked to answer, and in any other field, a question the server asks, including a credential path, a completion
  * suggestion, a completion error, a cancellation, including a credential path in its id, which is left unchanged, a resource update, including a credential path, any
  * other notification, including a credential path, any other server request, including a credential path, a request for filesystem
  * roots, the reply to any other client request, the reply to a resource
