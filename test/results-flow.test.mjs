@@ -1565,6 +1565,101 @@ test("flow: a credential in a filesystem root is reported when another server is
   assert.equal(JSON.stringify(box.audit()).includes(FAKE_TOKEN), false);
 });
 
+test("a filesystem root that is not an array never carries a credential path to the server", async () => {
+  const box = sandbox([ECHO]);
+  const ssh = "file:///home/me/.ssh/id_rsa";
+  const encoded = { uri: "file:///home/me/%2essh/id_rsa" };
+  const s = session(box);
+  try {
+    await s.listTools();
+    const first = s.wait(9003);
+    await s.request("test/roots", {});
+    const ask = await first;
+    const deniedReply = s.wait(ask.id);
+    s.send({ jsonrpc: "2.0", id: ask.id, result: { roots: ssh } });
+    const denied = await deniedReply;
+    assert.match(denied.error.message, /Blocked by toolwarden/);
+    assert.doesNotMatch(denied.error.message, /\.ssh/);
+
+    const second = s.wait(9003);
+    await s.request("test/roots", {});
+    const again = await second;
+    const encodedReply = s.wait(again.id);
+    s.send({ jsonrpc: "2.0", id: again.id, result: { roots: encoded } });
+    const encodedDenied = await encodedReply;
+    assert.match(encodedDenied.error.message, /Blocked by toolwarden/);
+
+    const third = s.wait(9003);
+    await s.request("test/roots", {});
+    const thirdAsk = await third;
+    const bareReply = s.wait(thirdAsk.id);
+    s.send({ jsonrpc: "2.0", id: thirdAsk.id, result: ssh });
+    const bareDenied = await bareReply;
+    assert.match(bareDenied.error.message, /Blocked by toolwarden/);
+
+    const fourth = s.wait(9003);
+    await s.request("test/roots", {});
+    const fourthAsk = await fourth;
+    s.send({ jsonrpc: "2.0", id: fourthAsk.id, result: { roots: "file:///tmp/notes" } });
+    const ordinary = await deliveredRoots(box, "file:///tmp/notes");
+    assert.equal(ordinary.result.roots, "file:///tmp/notes");
+  } finally {
+    await s.close();
+  }
+  assert.doesNotMatch(JSON.stringify(box.serverCalls()), /\.ssh|%2essh/);
+  assert.match(s.stderr(), /DENIED request "roots" on "fake"/);
+
+  const warning = session(box, ["--mode", "warn"]);
+  try {
+    await warning.listTools();
+    const incoming = warning.wait(9003);
+    await warning.request("test/roots", {});
+    const ask = await incoming;
+    warning.send({ jsonrpc: "2.0", id: ask.id, result: { roots: ssh } });
+    const kept = await deliveredRoots(box, ssh);
+    assert.equal(kept.result.roots, ssh);
+  } finally {
+    await warning.close();
+  }
+  assert.match(warning.stderr(), /warn mode, not blocked/);
+});
+
+async function deliveredRoots(box, text) {
+  const start = Date.now();
+  while (Date.now() - start < 2000) {
+    const found = box.serverCalls().find((call) => typeof call.result?.roots === "string" && call.result.roots.includes(text));
+    if (found) return found;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error("roots reply did not reach the server");
+}
+
+test("flow: a credential in a filesystem root that is not an array is reported when another server is told about it", async () => {
+  const box = sandbox([ECHO]);
+  const vault = session(box, [], "vault");
+  try {
+    await vault.listTools();
+    await vault.call("echo", { echo: `your token is ${FAKE_TOKEN}` });
+  } finally {
+    await vault.close();
+  }
+
+  const web = session(box, [], "web");
+  try {
+    await web.listTools();
+    const incoming = web.wait(9003);
+    await web.request("test/roots", {});
+    const ask = await incoming;
+    web.send({ jsonrpc: "2.0", id: ask.id, result: { roots: `your token is ${FAKE_TOKEN}` } });
+    const delivered = await deliveredRoots(box, FAKE_TOKEN);
+    assert.equal(delivered.result.roots, `your token is ${FAKE_TOKEN}`);
+  } finally {
+    await web.close();
+  }
+  assert.match(web.stderr(), /WARNING answer to "roots" on "web" carries a credential that server "vault" returned/);
+  assert.equal(JSON.stringify(box.audit()).includes(FAKE_TOKEN), false);
+});
+
 test("a credential path beside a client message never reaches the server", async () => {
   const box = sandbox([ECHO]);
   const ssh = "file:///home/me/.ssh/id_rsa";
