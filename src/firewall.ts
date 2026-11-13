@@ -1163,7 +1163,8 @@ export class Firewall {
 
     if (this.pendingInits.has(key)) {
       this.pendingInits.delete(key);
-      if (isObject(msg.result)) return this.checkInstructions(msg, msg.result);
+      const paired = this.foldPairedError(msg, "initialize", "reply");
+      if (isObject(msg.result)) return this.checkInstructions(paired ?? msg, msg.result) ?? paired;
       return this.foldReplyError(msg, "initialize");
     }
 
@@ -1171,58 +1172,75 @@ export class Firewall {
       this.pendingLists.delete(key);
       const requestedCursor = this.listCursors.get(key) ?? null;
       this.listCursors.delete(key);
-      const result = msg.result;
+      const paired = this.foldPairedError(msg, "tools/list", "reply");
+      const base = paired ?? msg;
+      const result = base.result;
       if (!isObject(result)) return this.foldReplyError(msg, "tools/list");
       let listed: Json | null = null;
       if (Array.isArray(result.tools)) {
         const nextCursor = typeof result.nextCursor === "string" && result.nextCursor !== "" ? result.nextCursor : null;
         const kept = this.checkListing(result.tools, requestedCursor, nextCursor);
-        if (kept.length !== result.tools.length) listed = { ...msg, result: { ...result, tools: kept } };
+        if (kept.length !== result.tools.length) listed = { ...base, result: { ...result, tools: kept } };
       }
-      return this.foldLooseItems(msg, result, "tools", this.foldBesideList(msg, result, "tools", listed));
+      return this.foldLooseItems(base, result, "tools", this.foldBesideList(base, result, "tools", listed)) ?? paired;
     }
 
     const catalog = this.pendingCatalogs.get(key);
     if (catalog !== undefined) {
       this.pendingCatalogs.delete(key);
-      if (!isObject(msg.result)) {
-        const method =
-          catalog === "resource" ? "resources/list" : catalog === "prompt" ? "prompts/list" : "resources/templates/list";
-        return this.foldReplyError(msg, method);
-      }
+      const method =
+        catalog === "resource" ? "resources/list" : catalog === "prompt" ? "prompts/list" : "resources/templates/list";
+      const paired = this.foldPairedError(msg, method, "reply");
+      if (!isObject(msg.result)) return this.foldReplyError(msg, method);
+      const base = paired ?? msg;
       this.checkCatalog(msg.result, catalog);
       const itemKey = catalog === "resource" ? "resources" : catalog === "prompt" ? "prompts" : "resourceTemplates";
-      return this.foldLooseItems(msg, msg.result, itemKey, this.foldBesideList(msg, msg.result, itemKey, null));
+      return this.foldLooseItems(base, msg.result, itemKey, this.foldBesideList(base, msg.result, itemKey, null)) ?? paired;
     }
 
     const pending = this.pendingCalls.get(key);
     if (pending !== undefined) {
       this.pendingCalls.delete(key);
-      if (isObject(msg.result)) return this.checkResult(msg, msg.result, pending.label, pending.kind);
+      const paired = this.foldPairedError(msg, pending.label, pending.kind);
+      if (isObject(msg.result)) return this.checkResult(paired ?? msg, msg.result, pending.label, pending.kind) ?? paired;
       if (isObject(msg.error)) return this.checkFailure(msg, msg.error, pending.label, pending.kind);
     }
 
     const completion = this.pendingCompletions.get(key);
     if (completion !== undefined) {
       this.pendingCompletions.delete(key);
-      if (isObject(msg.result)) return this.checkCompletion(msg, msg.result, completion);
+      const paired = this.foldPairedError(msg, completion, "completion");
+      if (isObject(msg.result)) return this.checkCompletion(paired ?? msg, msg.result, completion) ?? paired;
       if (isObject(msg.error)) return this.checkFailure(msg, msg.error, completion, "completion");
     }
 
     const asked = this.unknownClientRequestsAwaitingReply.get(key);
     if (asked !== undefined) {
       this.unknownClientRequestsAwaitingReply.delete(key);
-      if (isObject(msg.result)) return this.checkOtherReply(msg, msg.result, asked, "result");
+      const paired = this.foldPairedError(msg, asked, "reply");
+      if (isObject(msg.result)) return this.checkOtherReply(paired ?? msg, msg.result, asked, "result") ?? paired;
       if (isObject(msg.error)) return this.checkOtherReply(msg, msg.error, asked, "error");
     }
 
     const subscription = this.subscriptionsAwaitingReply.get(key);
     if (subscription !== undefined) {
       this.subscriptionsAwaitingReply.delete(key);
-      if (isObject(msg.result)) return this.checkOtherReply(msg, msg.result, subscription, "result");
+      const paired = this.foldPairedError(msg, subscription, "reply");
+      if (isObject(msg.result)) return this.checkOtherReply(paired ?? msg, msg.result, subscription, "result") ?? paired;
       if (isObject(msg.error)) return this.checkOtherReply(msg, msg.error, subscription, "error");
     }
     return null;
+  }
+
+  /** An error beside a result is still part of the server reply. An instruction there is still shown otherwise. */
+  private foldPairedError(
+    msg: Json,
+    label: string,
+    kind: "tool" | "resource" | "prompt" | "completion" | "reply",
+  ): Json | null {
+    if (!isObject(msg.result) || !isObject(msg.error)) return null;
+    if (kind === "reply") return this.checkOtherReply(msg, msg.error, label, "error");
+    return this.checkFailure(msg, msg.error, label, kind);
   }
 
   /** An error from a list or the opening handshake is still a server reply. An instruction there is still shown otherwise. */

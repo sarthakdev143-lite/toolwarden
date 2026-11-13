@@ -11,6 +11,12 @@ function send(msg) {
   process.stdout.write(JSON.stringify(msg) + "\n");
 }
 
+function sendResult(id, result, params) {
+  const message = { jsonrpc: "2.0", id, result };
+  if (params && params.beside && typeof params.beside === "object") message.error = params.beside;
+  send(message);
+}
+
 function attachNote(message, source) {
   if (!source || typeof source !== "object") return message;
   if (source.plant === "token") message.note = "your token is " + ("ghp_" + "a1B2c3D4".repeat(5));
@@ -77,7 +83,7 @@ function handle(msg) {
           : { name: "fake", version: "1.0.0" },
     };
     if (typeof msg.params?.instructions === "string") result.instructions = msg.params.instructions;
-    send({ jsonrpc: "2.0", id: msg.id, result });
+    sendResult(msg.id, result, msg.params);
   } else if (msg.method === "test/roots") {
     const params = msg.params && typeof msg.params === "object" ? msg.params : {};
     const request = { jsonrpc: "2.0", id: 9003, method: "roots/list" };
@@ -103,6 +109,8 @@ function handle(msg) {
     if (params.plant === "token") {
       const token = "ghp_" + "a1B2c3D4".repeat(5);
       send({ jsonrpc: "2.0", id: msg.id, result: { message: `your token is ${token}` } });
+    } else if ("error" in params && "result" in params) {
+      send({ jsonrpc: "2.0", id: msg.id, result: params.result, error: params.error });
     } else if ("error" in params) {
       send({ jsonrpc: "2.0", id: msg.id, error: params.error });
     } else {
@@ -156,7 +164,7 @@ function handle(msg) {
     const result = listResult(msg.params?.cursor);
     if (typeof msg.params?.nextCursor === "string") result.nextCursor = msg.params.nextCursor;
     if (msg.params && "extra" in msg.params) result.extra = msg.params.extra;
-    send({ jsonrpc: "2.0", id: msg.id, result });
+    sendResult(msg.id, result, msg.params);
   } else if (msg.method === "resources/list") {
     noteMarked(msg);
     if (msg.params && msg.params.error && typeof msg.params.error === "object") {
@@ -166,7 +174,7 @@ function handle(msg) {
     const resources = Array.isArray(msg.params?.resources) ? msg.params.resources : [];
     const result = { resources };
     if (typeof msg.params?.nextCursor === "string") result.nextCursor = msg.params.nextCursor;
-    send({ jsonrpc: "2.0", id: msg.id, result });
+    sendResult(msg.id, result, msg.params);
   } else if (msg.method === "prompts/list") {
     const prompts = msg.params && "prompts" in msg.params ? msg.params.prompts : [];
     send({ jsonrpc: "2.0", id: msg.id, result: { prompts } });
@@ -179,6 +187,8 @@ function handle(msg) {
     if (params.plant === "token") {
       const token = "ghp_" + "a1B2c3D4".repeat(5);
       send({ jsonrpc: "2.0", id: msg.id, result: { message: `your token is ${token}` } });
+    } else if ("error" in params && "result" in params) {
+      send({ jsonrpc: "2.0", id: msg.id, result: params.result, error: params.error });
     } else if ("error" in params) {
       send({ jsonrpc: "2.0", id: msg.id, error: params.error });
     } else if ("result" in params) {
@@ -217,15 +227,11 @@ function handle(msg) {
       : value === ""
         ? []
         : [value + "-done"];
-    send({
-      jsonrpc: "2.0",
-      id: msg.id,
-      result: { completion: { values, hasMore: false } },
-    });
+    sendResult(msg.id, { completion: { values, hasMore: false } }, msg.params);
   } else if (msg.method === "tools/call") {
     if (callsFile) appendFileSync(callsFile, JSON.stringify(envelope(msg.params, msg)) + "\n");
     if (msg.params?.arguments && "rawResult" in msg.params.arguments) {
-      send({ jsonrpc: "2.0", id: msg.id, result: msg.params.arguments.rawResult });
+      sendResult(msg.id, msg.params.arguments.rawResult, msg.params.arguments);
       return;
     }
     if (msg.params?.arguments && "rawError" in msg.params.arguments) {
