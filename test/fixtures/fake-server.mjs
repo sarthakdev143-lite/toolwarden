@@ -137,7 +137,7 @@ function handle(msg) {
         {
           jsonrpc: "2.0",
           id: 9004,
-          method: typeof params.method === "string" ? params.method : "custom/ask",
+          method: "method" in params ? params.method : "custom/ask",
           params: "params" in params ? params.params : {},
         },
         params,
@@ -251,7 +251,10 @@ function handle(msg) {
   } else if (msg.method === "tools/call") {
     if (callsFile) appendFileSync(callsFile, JSON.stringify(envelope(msg.params, msg)) + "\n");
     if (msg.params?.arguments && "rawResult" in msg.params.arguments) {
-      sendResult(msg.id, msg.params.arguments.rawResult, msg.params.arguments);
+      const message = { jsonrpc: "2.0", id: msg.id, result: msg.params.arguments.rawResult };
+      if (msg.params.arguments.beside && typeof msg.params.arguments.beside === "object") message.error = msg.params.arguments.beside;
+      if ("looseMethod" in msg.params.arguments) message.method = msg.params.arguments.looseMethod;
+      send(message);
       return;
     }
     if (msg.params?.arguments && "rawError" in msg.params.arguments) {
