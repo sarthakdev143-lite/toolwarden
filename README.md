@@ -11,7 +11,7 @@ AI app  ⇄  toolwarden  ⇄  MCP server
 - **Blocks rug-pulls.** The first time you use a server, toolwarden records ("pins") every tool's definition. If a tool's description or inputs change later, the tool is hidden from the AI and calls to it are blocked until you review the change.
 - **Quarantines new tools.** A tool that appears after you first approved a server stays hidden until you approve it.
 - **Guards your credentials.** Tool calls, resource reads and prompt arguments that reference SSH keys, cloud credentials, `.env` files or token files are denied before they reach the server. You can add your own rules.
-- **Inspects what tools, resources and prompts return.** If that text is aimed at the model ("ignore previous instructions", "do not tell the user"), toolwarden puts a notice in front of it telling the model to treat it as data. It can also withhold the output.
+- **Inspects what tools, resources and prompts return.** If that text is aimed at the model ("ignore previous instructions", "do not tell the user"), toolwarden puts a notice in front of it telling the model to treat it as data. It can also withhold the output. A resource or prompt description that looks the same way is reported.
 - **Follows data between servers.** If a credential returned by one server shows up in a call, resource read, or prompt argument to another, you are told. You can write rules such as "nothing from the vault server may go to the web server".
 - **Works with local and remote servers.** Local (stdio) servers are wrapped; remote (HTTP) servers go through a local proxy.
 - **Sets itself up.** `toolwarden init` finds the MCP servers configured on your machine and protects them in one step, with a backup and an undo.
