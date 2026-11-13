@@ -185,12 +185,12 @@ Put a `policy.json` in `~/.toolwarden/`:
 
 **Argument rules** (`rules`): a regular expression tested against every string in a tool call, other than the tool name. That includes `arguments`, `_meta`, and any other field sent beside them. The same rules apply to a completion request.
 
-- `tool` is a glob over the tool name (default `*`).
+- `tool` is a glob over the tool name (default `*`). A `*` matches any text, including a line break.
 - `action` is `deny` (default) or `warn`.
 
 **Flow rules** (`flows`): what to do when a value that one server returned, or showed in a tool definition, its introduction, or a resource, prompt, or template description, appears in a call to another server, including a completion request. The first matching rule wins.
 
-- `from` and `to` are globs over server names.
+- `from` and `to` are globs over server names. A `*` matches any text, including a line break.
 - `kind` is `secret` (only credential-shaped values, such as API tokens and private keys) or `any` (default).
 - `action` is `deny`, `warn` or `allow`.
 

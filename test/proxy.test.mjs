@@ -318,6 +318,32 @@ test("a tool that reverts to its approved definition is allowed again", async ()
   assert.equal(box.cli("status").status, 0);
 });
 
+test("policy: a credential path is denied when the tool name contains a line break", async () => {
+  const tool = {
+    name: "read\nfile",
+    description: "Read a file.",
+    inputSchema: { type: "object", properties: { path: { type: "string" } } },
+  };
+  const box = sandbox([tool]);
+  const s = session(box);
+  try {
+    await s.listTools();
+    const hidden = await s.call("read\nfile", { path: "/home/me/.ssh/id_rsa" });
+    assert.equal(hidden.result.isError, true, "a line break in the name does not skip the rule");
+    assert.match(hidden.result.content[0].text, /Blocked by toolwarden policy/);
+    const other = await s.request("notes\n", { path: "/home/me/.ssh/config" });
+    assert.match(other.error.message, /Blocked by toolwarden policy/);
+    const ok = await s.call("read\nfile", { path: "/home/me/project/README.md" });
+    assert.equal(ok.result.isError, false, "an ordinary path is allowed");
+  } finally {
+    await s.close();
+  }
+  assert.deepEqual(
+    box.serverCalls().map((c) => c.arguments?.path),
+    ["/home/me/project/README.md"],
+  );
+});
+
 test("policy: a call that reaches for credentials is denied and never reaches the server", async () => {
   const box = sandbox([READ_FILE]);
   const s = session(box);

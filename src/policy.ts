@@ -3,7 +3,7 @@ import { collectText, matchForms } from "./scan.js";
 
 export interface Rule {
   id: string;
-  /** Glob over the tool name. "*" matches anything. Defaults to "*". */
+  /** Glob over the tool name. "*" matches anything, including a line break. Defaults to "*". */
   tool?: string;
   /** Regular expression (case-insensitive) tested against every string in the call, other than a tool call's name, including object keys and text stored in a base64 blob (URL-safe, unpadded, or written with a compatibility or invisible character) or in image and audio data. Percent-encoding, compatibility characters, and invisible characters are folded before the test. */
   pattern: string;
@@ -109,8 +109,9 @@ interface CompiledRule {
   pattern: RegExp;
 }
 
+/** `*` matches any text, including a line break, so a name cannot step around a rule by containing one. */
 function globToRegExp(glob: string): RegExp {
-  const escaped = glob.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
+  const escaped = glob.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[\\s\\S]*");
   return new RegExp("^" + escaped + "$");
 }
 

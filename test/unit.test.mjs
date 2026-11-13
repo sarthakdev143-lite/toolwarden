@@ -25,6 +25,15 @@ test("server names that are not safe file names stay distinct", () => {
   assert.ok(slug("a".repeat(200)).length <= 80);
 });
 
+test("a credential path is denied when the tool name contains a line break", () => {
+  const policy = new Policy(DEFAULT_RULES);
+  for (const name of ["read_file\n", "read_file\r", "read_file\u2028", "read_file\u2029"]) {
+    assert.equal(policy.evaluate(name, { path: "/home/me/.ssh/id_rsa" }).denied?.ruleId, "ssh-keys");
+  }
+  const scoped = new Policy([{ id: "prod", tool: "query_*", pattern: "prod-db", message: "touches prod", action: "deny" }]);
+  assert.equal(scoped.evaluate("query_db\n", { q: "prod-db" }).denied?.ruleId, "prod");
+});
+
 test("scan flags hidden instructions and leaves normal descriptions alone", () => {
   const clean = { name: "search", description: "Search the web and return the top results." };
   assert.deepEqual(scanTool(clean), []);
