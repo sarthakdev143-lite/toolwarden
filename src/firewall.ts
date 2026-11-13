@@ -423,6 +423,8 @@ export class Firewall {
     if (msg.method === "tools/call") {
       const sided = this.sideDecision(msg);
       if (sided) return sided;
+      const loose = this.looseParams(msg);
+      if (loose) return loose;
       const decision = this.checkCall(msg);
       const name = isObject(msg.params) ? msg.params.name : undefined;
       if (decision.forward && "id" in msg && typeof name === "string") {
@@ -434,6 +436,8 @@ export class Firewall {
     if ((msg.method === "resources/read" || msg.method === "prompts/get") && "id" in msg) {
       const sided = this.sideDecision(msg);
       if (sided) return sided;
+      const loose = this.looseParams(msg);
+      if (loose) return loose;
       const params = isObject(msg.params) ? msg.params : {};
       const label =
         msg.method === "resources/read"
@@ -456,6 +460,8 @@ export class Firewall {
     if (msg.method === "completion/complete" && "id" in msg) {
       const sided = this.sideDecision(msg);
       if (sided) return sided;
+      const loose = this.looseParams(msg);
+      if (loose) return loose;
       const params = isObject(msg.params) ? msg.params : {};
       const argument = isObject(params.argument) ? params.argument : {};
       const name = typeof argument.name === "string" && argument.name !== "" ? argument.name : "completion";
@@ -470,6 +476,8 @@ export class Firewall {
     if (msg.method === "resources/subscribe" || msg.method === "resources/unsubscribe") {
       const sided = this.sideDecision(msg);
       if (sided) return sided;
+      const loose = this.looseParams(msg);
+      if (loose) return loose;
       const params = isObject(msg.params) ? msg.params : {};
       const uri = typeof params.uri === "string" && params.uri !== "" ? params.uri : "resource";
       const denied = this.policyDecision(msg, visibleLabel(uri), "subscribe", params);
@@ -516,6 +524,17 @@ export class Firewall {
     const denied = this.policyDecision(msg, label, "other", body, toolName);
     if (denied) return denied;
     const flowed = this.flowDecision(msg, label, "answer", body);
+    if (flowed) return flowed;
+    return null;
+  }
+
+  /** Policy and flow for `params` when it is not an object. An array or a string still reaches the server otherwise. */
+  private looseParams(msg: Json): ClientDecision | null {
+    if (!("params" in msg) || isObject(msg.params)) return null;
+    const label = visibleLabel(typeof msg.method === "string" ? msg.method : "request");
+    const denied = this.policyDecision(msg, label, "other", msg.params);
+    if (denied) return denied;
+    const flowed = this.flowDecision(msg, label, "other", msg.params);
     if (flowed) return flowed;
     return null;
   }

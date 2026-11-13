@@ -2813,6 +2813,65 @@ test("a credential path in a response that is not the outstanding answer never r
   assert.match(JSON.stringify(box.serverCalls()), /id_rsa/);
 });
 
+test("a credential path in non-object parameters never reaches the server", async () => {
+  const box = sandbox([ECHO]);
+  const ssh = "file:///home/me/.ssh/id_rsa";
+  const encoded = "file:///home/me/%2essh/%69d_rsa";
+  const s = session(box);
+  try {
+    await s.listTools();
+    const listed = s.wait("array-call");
+    s.send({
+      jsonrpc: "2.0",
+      id: "array-call",
+      method: "tools/call",
+      params: [ssh, "marker-array-path"],
+    });
+    const blocked = await listed;
+    assert.equal(blocked.error.code, -32000);
+    assert.match(blocked.error.message, /Blocked by toolwarden policy/);
+
+    const raw = s.wait("string-call");
+    s.send({ jsonrpc: "2.0", id: "string-call", method: "tools/call", params: "note\n" + ssh });
+    const lined = await raw;
+    assert.equal(lined.error.code, -32000);
+
+    const read = s.wait("string-read");
+    s.send({ jsonrpc: "2.0", id: "string-read", method: "resources/read", params: encoded });
+    const foreign = await read;
+    assert.equal(foreign.error.code, -32000);
+    assert.match(foreign.error.message, /Blocked by toolwarden policy/);
+
+    const ok = await s.call("echo", { echo: "marker-ok" });
+    assert.equal(ok.result.content[0].text, "marker-ok");
+  } finally {
+    await s.close();
+  }
+  const calls = JSON.stringify(box.serverCalls());
+  assert.doesNotMatch(calls, /marker-array-path|id_rsa|%2essh|\.ssh/);
+  assert.match(calls, /marker-ok/);
+  assert.match(s.stderr(), /DENIED request "tools\/call"/);
+  assert.match(s.stderr(), /DENIED request "resources\/read"/);
+
+  const warning = session(box, ["--mode", "warn"]);
+  try {
+    await warning.listTools();
+    const kept = warning.wait("array-warn");
+    warning.send({
+      jsonrpc: "2.0",
+      id: "array-warn",
+      method: "tools/call",
+      params: [ssh, "marker-array-warn"],
+    });
+    const delivered = await kept;
+    assert.equal(delivered.error, undefined);
+  } finally {
+    await warning.close();
+  }
+  assert.match(warning.stderr(), /warn mode, not blocked/);
+  assert.match(JSON.stringify(box.serverCalls()), /marker-array-warn/);
+});
+
 test("a credential path in a request id never reaches the server", async () => {
   const box = sandbox([ECHO]);
   const ssh = "file:///home/me/.ssh/id_rsa";
