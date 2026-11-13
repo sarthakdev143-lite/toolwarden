@@ -2784,6 +2784,25 @@ test("suspicious output that is not a list still reaches the model with a notice
     assert.equal(prompt.result.messages.length, 2);
     assert.match(prompt.result.messages[0].content.text, /^\[toolwarden notice\]/);
     assert.equal(prompt.result.messages[1].content.text, INJECTION, "the original prompt is still delivered");
+
+    const quietSampling = s.wait(9001);
+    await s.request("test/sampling", {
+      messages: { role: "user", content: { type: "text", text: "Summarize the notes." } },
+      maxTokens: 16,
+    });
+    const ordinary = await quietSampling;
+    assert.equal(Array.isArray(ordinary.params.messages), false);
+    assert.equal(ordinary.params.messages.content.text, "Summarize the notes.");
+
+    const samplingWait = s.wait(9001);
+    await s.request("test/sampling", {
+      messages: { role: "user", content: { type: "text", text: INJECTION } },
+      maxTokens: 16,
+    });
+    const sampling = await samplingWait;
+    assert.equal(sampling.params.messages.length, 2);
+    assert.match(sampling.params.messages[0].content.text, /^\[toolwarden notice\]/);
+    assert.equal(sampling.params.messages[1].content.text, INJECTION, "the original sampling message is still delivered");
   } finally {
     await s.close();
   }

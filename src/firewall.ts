@@ -2001,7 +2001,7 @@ export class Firewall {
     return { ...msg, params: withhold ? withholdElicit(text) : annotateElicit(params, text) };
   }
 
-  /** The system prompt is instructions the model follows. A credential path there is still shown otherwise. A sampling message is what the model is asked to answer. A credential path there is still shown otherwise. Any other field on that request is still part of it. A credential path there is still shown otherwise. */
+  /** The system prompt is instructions the model follows. A credential path there is still shown otherwise. A sampling message is what the model is asked to answer. A credential path there is still shown otherwise. Any other field on that request is still part of it. A credential path there is still shown otherwise. An instruction in that message is still shown with a notice in front, including when the message is not a list. */
   private checkSampling(msg: Json): Json | null {
     const params = isObject(msg.params) ? msg.params : {};
     this.opts.flow?.record(params);
@@ -2043,9 +2043,10 @@ export class Firewall {
       if (this.resultMode !== "annotate") return null;
     }
     const message = { role: "user", content: { type: "text", text } };
+    const prior = Array.isArray(params.messages) ? params.messages : params.messages === undefined ? [] : [params.messages];
     const nextParams = withhold
       ? withholdSampling(params, message)
-      : annotateSampling(params, text, [message, ...(Array.isArray(params.messages) ? params.messages : [])]);
+      : annotateSampling(params, text, [message, ...prior]);
     return { ...msg, params: nextParams };
   }
 
