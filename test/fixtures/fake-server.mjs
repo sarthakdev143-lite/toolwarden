@@ -64,6 +64,10 @@ function noteMarked(msg) {
 function handle(msg) {
   if (msg.method === "initialize") {
     noteMarked(msg);
+    if (msg.params && msg.params.error && typeof msg.params.error === "object") {
+      send({ jsonrpc: "2.0", id: msg.id, error: msg.params.error });
+      return;
+    }
     const result = {
       protocolVersion: "2025-06-18",
       capabilities: { tools: { listChanged: true } },
@@ -145,12 +149,20 @@ function handle(msg) {
     if (msg.id !== undefined) send({ jsonrpc: "2.0", id: msg.id, result: { ok: true } });
   } else if (msg.method === "tools/list") {
     noteMarked(msg);
+    if (msg.params && msg.params.error && typeof msg.params.error === "object") {
+      send({ jsonrpc: "2.0", id: msg.id, error: msg.params.error });
+      return;
+    }
     const result = listResult(msg.params?.cursor);
     if (typeof msg.params?.nextCursor === "string") result.nextCursor = msg.params.nextCursor;
     if (msg.params && "extra" in msg.params) result.extra = msg.params.extra;
     send({ jsonrpc: "2.0", id: msg.id, result });
   } else if (msg.method === "resources/list") {
     noteMarked(msg);
+    if (msg.params && msg.params.error && typeof msg.params.error === "object") {
+      send({ jsonrpc: "2.0", id: msg.id, error: msg.params.error });
+      return;
+    }
     const resources = Array.isArray(msg.params?.resources) ? msg.params.resources : [];
     const result = { resources };
     if (typeof msg.params?.nextCursor === "string") result.nextCursor = msg.params.nextCursor;

@@ -1049,8 +1049,8 @@ export class Firewall {
 
     if (this.pendingInits.has(key)) {
       this.pendingInits.delete(key);
-      if (!isObject(msg.result)) return null;
-      return this.checkInstructions(msg, msg.result);
+      if (isObject(msg.result)) return this.checkInstructions(msg, msg.result);
+      return this.foldReplyError(msg, "initialize");
     }
 
     if (this.pendingLists.has(key)) {
@@ -1058,7 +1058,7 @@ export class Firewall {
       const requestedCursor = this.listCursors.get(key) ?? null;
       this.listCursors.delete(key);
       const result = msg.result;
-      if (!isObject(result)) return null;
+      if (!isObject(result)) return this.foldReplyError(msg, "tools/list");
       let listed: Json | null = null;
       if (Array.isArray(result.tools)) {
         const nextCursor = typeof result.nextCursor === "string" && result.nextCursor !== "" ? result.nextCursor : null;
@@ -1071,7 +1071,11 @@ export class Firewall {
     const catalog = this.pendingCatalogs.get(key);
     if (catalog !== undefined) {
       this.pendingCatalogs.delete(key);
-      if (!isObject(msg.result)) return null;
+      if (!isObject(msg.result)) {
+        const method =
+          catalog === "resource" ? "resources/list" : catalog === "prompt" ? "prompts/list" : "resources/templates/list";
+        return this.foldReplyError(msg, method);
+      }
       this.checkCatalog(msg.result, catalog);
       const itemKey = catalog === "resource" ? "resources" : catalog === "prompt" ? "prompts" : "resourceTemplates";
       return this.foldLooseItems(msg, msg.result, itemKey, this.foldBesideList(msg, msg.result, itemKey, null));
@@ -1105,6 +1109,12 @@ export class Firewall {
       if (isObject(msg.error)) return this.checkOtherReply(msg, msg.error, subscription, "error");
     }
     return null;
+  }
+
+  /** An error from a list or the opening handshake is still a server reply. An instruction there is still shown otherwise. */
+  private foldReplyError(msg: Json, label: string): Json | null {
+    if (!isObject(msg.error)) return null;
+    return this.checkOtherReply(msg, msg.error, label, "error");
   }
 
   private checkOtherReply(msg: Json, body: Json, label: string, field: "result" | "error"): Json | null {
