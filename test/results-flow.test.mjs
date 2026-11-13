@@ -30,6 +30,34 @@ test("tool output that looks like instructions gets a notice in front of it by d
   assert.ok(box.audit().some((r) => r.event === "result_warning" && r.checks.includes("override-instructions")));
 });
 
+test("a tool error that looks like instructions gets a notice in front of it", async () => {
+  const box = sandbox([ECHO]);
+  const s = session(box);
+  try {
+    await s.listTools();
+    const res = await s.call("echo", { fail: INJECTION });
+    assert.equal(res.error.code, -32000);
+    assert.match(res.error.message, /^\[toolwarden notice\]/);
+    assert.match(res.error.message, /evil\.example/, "the original error is still delivered");
+    const plain = await s.call("echo", { fail: "file not found" });
+    assert.equal(plain.error.message, "file not found");
+  } finally {
+    await s.close();
+  }
+  assert.match(s.stderr(), /WARNING: output of "echo" on "fake"/);
+
+  const blocking = session(box, ["--results", "block"]);
+  try {
+    await blocking.listTools();
+    const withheld = await blocking.call("echo", { fail: INJECTION });
+    assert.equal(withheld.error.code, -32000);
+    assert.match(withheld.error.message, /^Blocked by toolwarden:/);
+    assert.doesNotMatch(withheld.error.message, /evil\.example/);
+  } finally {
+    await blocking.close();
+  }
+});
+
 test("a sampling request that looks like instructions gets a notice before the model sees it", async () => {
   const box = sandbox([ECHO]);
   const poisoned = {
