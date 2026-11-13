@@ -60,9 +60,10 @@ the server just issued, and only for 32 pages. A server that always advertises a
 page does not keep the first-use window open, and a call to a tool that was never listed
 is blocked.
 
-**Pattern checks can be evaded.** A determined attacker can encode, split or reword. The
-argument rules, result checks and flow tracking raise the cost of an attack and catch the
-common forms; they are not a proof of safety.
+**Pattern checks can be evaded.** One layer of percent-encoding is decoded before the
+checks. A determined attacker can encode another way, split or reword. The argument
+rules, result checks and flow tracking raise the cost of an attack and catch the common
+forms; they are not a proof of safety.
 
 **A server acts with whatever access it was given.** toolwarden governs what passes
 through the protocol. A local server that reads `~/.ssh` by itself, without being asked

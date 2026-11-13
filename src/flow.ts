@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { includePercentDecoded } from "./percent.js";
 import { slug } from "./pins.js";
 
 /**
@@ -59,7 +60,7 @@ function collectStrings(value: unknown, out: string[]): void {
 export function extractFingerprints(value: unknown): { secrets: string[]; values: string[] } {
   const strings: string[] = [];
   collectStrings(value, strings);
-  const text = strings.join("\n").slice(0, MAX_SCAN_CHARS);
+  const text = includePercentDecoded(strings).join("\n").slice(0, MAX_SCAN_CHARS);
 
   const secrets = new Set<string>();
   for (const pattern of SECRET_PATTERNS) {
