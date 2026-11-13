@@ -1660,6 +1660,87 @@ test("flow: a credential in a filesystem root that is not an array is reported w
   assert.equal(JSON.stringify(box.audit()).includes(FAKE_TOKEN), false);
 });
 
+test("a credential path beside a filesystem root never reaches the server", async () => {
+  const box = sandbox([ECHO]);
+  const project = { uri: "file:///home/me/project", name: "Project" };
+  const ssh = "file:///home/me/.ssh/id_rsa";
+  const encoded = "file:///home/me/%2essh/id_rsa";
+  const s = session(box);
+  try {
+    await s.listTools();
+    const first = s.wait(9003);
+    await s.request("test/roots", {});
+    const ask = await first;
+    s.send({ jsonrpc: "2.0", id: ask.id, result: { roots: [project], note: ssh } });
+    const stripped = await rootsReply(box);
+    assert.deepEqual(stripped.result.roots, [project]);
+    assert.equal(stripped.result.note, undefined);
+
+    const second = s.wait(9003);
+    await s.request("test/roots", {});
+    const again = await second;
+    s.send({ jsonrpc: "2.0", id: again.id, result: { roots: [project], note: encoded } });
+    const encodedStripped = await rootsReply(box, 2);
+    assert.deepEqual(encodedStripped.result.roots, [project]);
+    assert.equal(encodedStripped.result.note, undefined);
+
+    const third = s.wait(9003);
+    await s.request("test/roots", {});
+    const thirdAsk = await third;
+    s.send({ jsonrpc: "2.0", id: thirdAsk.id, result: { roots: [project], note: "file:///tmp/notes" } });
+    const ordinary = await rootsReply(box, 3);
+    assert.deepEqual(ordinary.result.roots, [project]);
+    assert.equal(ordinary.result.note, "file:///tmp/notes");
+  } finally {
+    await s.close();
+  }
+  assert.doesNotMatch(JSON.stringify(box.serverCalls()), /\.ssh|%2essh/);
+  assert.match(s.stderr(), /DENIED root field "note" on "fake"/);
+
+  const warning = session(box, ["--mode", "warn"]);
+  try {
+    await warning.listTools();
+    const incoming = warning.wait(9003);
+    await warning.request("test/roots", {});
+    const ask = await incoming;
+    warning.send({ jsonrpc: "2.0", id: ask.id, result: { roots: [project], note: ssh } });
+    const kept = await rootsReply(box, 4);
+    assert.deepEqual(kept.result.roots, [project]);
+    assert.equal(kept.result.note, ssh);
+  } finally {
+    await warning.close();
+  }
+  assert.match(warning.stderr(), /warn mode, not blocked/);
+});
+
+test("flow: a credential beside a filesystem root is reported when another server is told about it", async () => {
+  const box = sandbox([ECHO]);
+  const project = { uri: "file:///home/me/project", name: "Project" };
+  const vault = session(box, [], "vault");
+  try {
+    await vault.listTools();
+    await vault.call("echo", { echo: `your token is ${FAKE_TOKEN}` });
+  } finally {
+    await vault.close();
+  }
+
+  const web = session(box, [], "web");
+  try {
+    await web.listTools();
+    const incoming = web.wait(9003);
+    await web.request("test/roots", {});
+    const ask = await incoming;
+    web.send({ jsonrpc: "2.0", id: ask.id, result: { roots: [project], note: `your token is ${FAKE_TOKEN}` } });
+    const delivered = await rootsReply(box);
+    assert.equal(delivered.result.note, `your token is ${FAKE_TOKEN}`);
+    assert.deepEqual(delivered.result.roots, [project]);
+  } finally {
+    await web.close();
+  }
+  assert.match(web.stderr(), /WARNING root field "note" on "web" carries a credential that server "vault" returned/);
+  assert.equal(JSON.stringify(box.audit()).includes(FAKE_TOKEN), false);
+});
+
 test("a credential path beside a client message never reaches the server", async () => {
   const box = sandbox([ECHO]);
   const ssh = "file:///home/me/.ssh/id_rsa";
