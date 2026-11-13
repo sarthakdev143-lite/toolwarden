@@ -32,8 +32,8 @@ Usage:
 Options for "run" and "http":
   --name <id>          Name for this server (default: derived from the command or URL)
   --mode <block|warn>  block (default) stops bad calls; warn only reports them
-  --results <mode>     What to do when tool output looks like instructions:
-                       annotate (default), warn, block, or off
+  --results <mode>     What to do when tool output or the server's introduction
+                       looks like instructions: annotate (default), warn, block, or off
   --policy <file>      Policy file with extra rules (default: <state>/policy.json if present)
   --no-default-rules   Turn off the built-in credential-path rules
   --no-flow            Turn off tracking of data moving between servers
