@@ -7,7 +7,7 @@
  * They produce warnings, never blocks: heuristics have false positives.
  */
 
-import { includePercentDecoded } from "./percent.js";
+import { percentDecoded } from "./percent.js";
 
 interface Check {
   id: string;
@@ -19,9 +19,43 @@ interface Check {
 const INVISIBLE_SOURCE =
   "[\\u200B\\u200C\\u200E\\u200F\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u2069\\uFEFF]|[\\u{E0000}-\\u{E007F}]";
 
-/** Fold compatibility characters and drop invisible characters, so a lookalike path can be matched. */
+/** Fold compatibility characters and drop invisible characters, so a lookalike string can be matched. */
 export function comparableText(value: string): string {
   return value.normalize("NFKC").replace(new RegExp(INVISIBLE_SOURCE, "gu"), "");
+}
+
+function hasNonAscii(value: string): boolean {
+  for (let i = 0; i < value.length; i++) {
+    if (value.charCodeAt(i) > 127) return true;
+  }
+  return false;
+}
+
+/**
+ * The string itself, plus the same string with percent-encoding undone and with
+ * compatibility characters and invisible characters folded. Each result is
+ * folded again, so text cannot hide behind one layer of either disguise.
+ */
+export function matchForms(value: string): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const add = (s: string) => {
+    if (seen.has(s)) return;
+    seen.add(s);
+    out.push(s);
+  };
+  add(value);
+  for (let i = 0; i < out.length && i < 8; i++) {
+    const s = out[i];
+    if (s === undefined) continue;
+    const decoded = percentDecoded(s);
+    if (decoded !== null) add(decoded);
+    if (hasNonAscii(s)) {
+      const folded = comparableText(s);
+      if (folded !== s) add(folded);
+    }
+  }
+  return out;
 }
 
 const CHECKS: Check[] = [
@@ -118,9 +152,9 @@ export interface Finding {
   message: string;
 }
 
-/** Scan every string in a tool definition (description, schema descriptions, defaults, enums). */
+/** Scan every string in a tool definition (description, schema descriptions, defaults, enums), including text folded out of a lookalike form. */
 export function scanTool(tool: unknown): Finding[] {
-  const text = includePercentDecoded(collectText(tool)).join("\n");
+  const text = collectText(tool).flatMap(matchForms).join("\n");
   const findings: Finding[] = [];
   for (const check of CHECKS) {
     if (check.pattern.test(text)) findings.push({ id: check.id, message: check.message });
@@ -162,9 +196,9 @@ const RESULT_CHECKS: Check[] = [
   },
 ];
 
-/** Scan the text a tool returned for instructions aimed at the model. */
+/** Scan the text a tool returned for instructions aimed at the model, including text folded out of a lookalike form. */
 export function scanResult(result: unknown): Finding[] {
-  const text = includePercentDecoded(collectText(result)).join("\n").slice(0, 2_000_000);
+  const text = collectText(result).flatMap(matchForms).join("\n").slice(0, 2_000_000);
   const findings: Finding[] = [];
   for (const check of RESULT_CHECKS) {
     if (check.pattern.test(text)) findings.push({ id: check.id, message: check.message });

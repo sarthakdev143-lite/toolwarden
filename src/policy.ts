@@ -1,6 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { percentDecoded } from "./percent.js";
-import { collectText, comparableText } from "./scan.js";
+import { collectText, matchForms } from "./scan.js";
 
 export interface Rule {
   id: string;
@@ -108,40 +107,6 @@ interface CompiledRule {
   rule: Rule;
   tool: RegExp;
   pattern: RegExp;
-}
-
-function hasNonAscii(value: string): boolean {
-  for (let i = 0; i < value.length; i++) {
-    if (value.charCodeAt(i) > 127) return true;
-  }
-  return false;
-}
-
-/**
- * The string itself, plus the same string with percent-encoding undone and with
- * compatibility characters and invisible characters folded. Each result is
- * folded again, so a path cannot hide behind one layer of either disguise.
- */
-function matchForms(value: string): string[] {
-  const out: string[] = [];
-  const seen = new Set<string>();
-  const add = (s: string) => {
-    if (seen.has(s)) return;
-    seen.add(s);
-    out.push(s);
-  };
-  add(value);
-  for (let i = 0; i < out.length && i < 8; i++) {
-    const s = out[i];
-    if (s === undefined) continue;
-    const decoded = percentDecoded(s);
-    if (decoded !== null) add(decoded);
-    if (hasNonAscii(s)) {
-      const folded = comparableText(s);
-      if (folded !== s) add(folded);
-    }
-  }
-  return out;
 }
 
 function globToRegExp(glob: string): RegExp {
