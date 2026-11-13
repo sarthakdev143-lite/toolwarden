@@ -145,11 +145,16 @@ function handle(msg) {
     if (msg.id !== undefined) send({ jsonrpc: "2.0", id: msg.id, result: { ok: true } });
   } else if (msg.method === "tools/list") {
     noteMarked(msg);
-    send({ jsonrpc: "2.0", id: msg.id, result: listResult(msg.params?.cursor) });
+    const result = listResult(msg.params?.cursor);
+    if (typeof msg.params?.nextCursor === "string") result.nextCursor = msg.params.nextCursor;
+    if (msg.params && "extra" in msg.params) result.extra = msg.params.extra;
+    send({ jsonrpc: "2.0", id: msg.id, result });
   } else if (msg.method === "resources/list") {
     noteMarked(msg);
     const resources = Array.isArray(msg.params?.resources) ? msg.params.resources : [];
-    send({ jsonrpc: "2.0", id: msg.id, result: { resources } });
+    const result = { resources };
+    if (typeof msg.params?.nextCursor === "string") result.nextCursor = msg.params.nextCursor;
+    send({ jsonrpc: "2.0", id: msg.id, result });
   } else if (msg.method === "prompts/list") {
     const prompts = Array.isArray(msg.params?.prompts) ? msg.params.prompts : [];
     send({ jsonrpc: "2.0", id: msg.id, result: { prompts } });
