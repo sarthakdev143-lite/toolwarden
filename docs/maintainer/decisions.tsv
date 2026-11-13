@@ -112,3 +112,7 @@ ts	phase	decision	why	evidence	result
 2026-11-13T03:01:25Z	red	a base64-encoded credential was written to the audit log	redaction decoded percent-encoding only	test/results-flow.test.mjs	failed as expected, the base64 string was still in the log
 2026-11-13T03:01:25Z	green	a base64 credential is removed from the log, including one wrapped in percent-encoding	a notes blob and a PNG blob stay unchanged, and a percent-encoded path stays	npm test	58 pass, 0 fail
 2026-11-13T03:01:25Z	review	kept the decodedBlob contract and removed two restatements	the export states one layer of standard base64, UTF-8 text only, otherwise null	comment review on the diff	2 comments removed
+2026-11-13T03:05:44Z	merge	merged base64 log redaction after 5 CI checks passed	a base64 credential is removed from the audit log, and a notes blob and a PNG blob stay unchanged	https://github.com/sarthakdev143-lite/toolwarden/pull/27	merged 8b78395
+2026-11-13T03:05:44Z	red	reads of database, Terraform, Kubernetes, and rclone credential files were allowed	the default rules stopped at the earlier token files	test/unit.test.mjs	failed as expected, cat ~/.pgpass was not denied
+2026-11-13T03:05:44Z	green	those credential files are denied, including a relative path, a Windows path, and one percent-encoded pgpass	a project .terraform directory, a search for .pgpass, and rclone-backup stay allowed	npm test	58 pass, 0 fail
+2026-11-13T03:05:44Z	review	the credential-file rules added no comments	the rule ids name the locations	comment review on the diff	0 comments removed
