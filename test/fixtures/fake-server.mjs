@@ -80,7 +80,11 @@ function handle(msg) {
   } else if (msg.method === "tools/call") {
     if (callsFile) appendFileSync(callsFile, JSON.stringify(msg.params) + "\n");
     if (typeof msg.params?.arguments?.fail === "string") {
-      send({ jsonrpc: "2.0", id: msg.id, error: { code: -32000, message: msg.params.arguments.fail } });
+      const error = { code: -32000, message: msg.params.arguments.fail };
+      if (msg.params.arguments.failData && typeof msg.params.arguments.failData === "object") {
+        error.data = msg.params.arguments.failData;
+      }
+      send({ jsonrpc: "2.0", id: msg.id, error });
       return;
     }
     const result = {

@@ -90,6 +90,16 @@ function scrubSuspicious(value: unknown): unknown {
   return value;
 }
 
+function annotateFailure(error: Json, text: string): Json {
+  const next: Json = { ...error };
+  for (const [key, value] of Object.entries(error)) {
+    if (key === "message" || key === "code") continue;
+    next[key] = prefixSuspicious(value, text);
+  }
+  next.message = typeof error.message === "string" ? text + "\n\n" + error.message : text;
+  return next;
+}
+
 function annotateSampling(params: Json, text: string, messages: unknown): Json {
   const next: Json = { ...params, messages };
   for (const [key, value] of Object.entries(params)) {
@@ -479,8 +489,7 @@ export class Firewall {
       reason: reasons,
     });
     if (this.resultMode !== "annotate") return null;
-    const message = typeof error.message === "string" ? text + "\n\n" + error.message : text;
-    return { ...msg, error: { ...error, message } };
+    return { ...msg, error: annotateFailure(error, text) };
   }
 
   private checkCatalog(result: Json, kind: CatalogKind): void {
