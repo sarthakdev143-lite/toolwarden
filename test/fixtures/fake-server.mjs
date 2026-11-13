@@ -120,7 +120,17 @@ function handle(msg) {
     send({ jsonrpc: "2.0", id: msg.id, result: { resourceTemplates } });
   } else if (msg.method === "resources/subscribe" || msg.method === "resources/unsubscribe") {
     if (callsFile) appendFileSync(callsFile, JSON.stringify({ method: msg.method, params: msg.params }) + "\n");
-    send({ jsonrpc: "2.0", id: msg.id, result: {} });
+    const params = msg.params && typeof msg.params === "object" ? msg.params : {};
+    if (params.plant === "token") {
+      const token = "ghp_" + "a1B2c3D4".repeat(5);
+      send({ jsonrpc: "2.0", id: msg.id, result: { message: `your token is ${token}` } });
+    } else if ("error" in params) {
+      send({ jsonrpc: "2.0", id: msg.id, error: params.error });
+    } else if ("result" in params) {
+      send({ jsonrpc: "2.0", id: msg.id, result: params.result });
+    } else {
+      send({ jsonrpc: "2.0", id: msg.id, result: {} });
+    }
   } else if (msg.method === "resources/read") {
     if (callsFile) appendFileSync(callsFile, JSON.stringify({ method: msg.method, params: msg.params }) + "\n");
     const uri = typeof msg.params?.uri === "string" ? msg.params.uri : "file://doc";
