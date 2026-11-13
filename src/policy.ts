@@ -56,6 +56,31 @@ export const DEFAULT_RULES: Rule[] = [
     pattern: PATH_EDGE + "\\.(npmrc|pypirc|netrc|git-credentials)($|[^\\w.-])",
     message: "references a file that stores access tokens",
   },
+  {
+    id: "docker-credentials",
+    pattern: PATH_EDGE + "\\.docker($|[^\\w.-])",
+    message: "references Docker credentials",
+  },
+  {
+    id: "gh-credentials",
+    pattern: PATH_EDGE + "\\.config[\\\\/]gh($|[^\\w.-])",
+    message: "references GitHub CLI credentials",
+  },
+  {
+    id: "gnupg-keys",
+    pattern: PATH_EDGE + "\\.gnupg($|[^\\w.-])",
+    message: "references GnuPG keys",
+  },
+  {
+    id: "cargo-credentials",
+    pattern: PATH_EDGE + "\\.cargo[\\\\/]credentials(\\.toml)?($|[^\\w.-])",
+    message: "references Cargo registry credentials",
+  },
+  {
+    id: "vault-token",
+    pattern: PATH_EDGE + "\\.vault-token($|[^\\w.-])",
+    message: "references a Vault token",
+  },
 ];
 
 interface CompiledRule {

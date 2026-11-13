@@ -76,6 +76,19 @@ test("default policy catches credential paths in nested arguments", () => {
   assert.equal(policy.evaluate("run", { cmd: "cat .ssh/config" }).denied?.ruleId, "ssh-keys");
   assert.equal(policy.evaluate("run", { cmd: "type .npmrc" }).denied?.ruleId, "package-tokens");
   assert.equal(policy.evaluate("run", { cmd: 'cat ".kube/config"' }).denied?.ruleId, "cloud-credentials");
+  assert.equal(policy.evaluate("run", { file: "/home/me/.docker/config.json" }).denied?.ruleId, "docker-credentials");
+  assert.equal(policy.evaluate("run", { cmd: "cat .docker/config.json" }).denied?.ruleId, "docker-credentials");
+  assert.equal(policy.evaluate("run", { file: "https://index.docker.io/v1/" }).denied, null);
+  assert.equal(policy.evaluate("run", { file: ".dockerignore" }).denied, null);
+  assert.equal(policy.evaluate("run", { file: "/home/me/.config/gh/hosts.yml" }).denied?.ruleId, "gh-credentials");
+  assert.equal(policy.evaluate("run", { file: "/home/me/.config/github/hosts.yml" }).denied, null);
+  assert.equal(policy.evaluate("run", { file: "/home/me/.gnupg/private-keys-v1.d/abc.key" }).denied?.ruleId, "gnupg-keys");
+  assert.equal(policy.evaluate("run", { file: "/home/me/.cargo/credentials.toml" }).denied?.ruleId, "cargo-credentials");
+  assert.equal(policy.evaluate("run", { file: "C:\\Users\\me\\.cargo\\credentials.toml" }).denied?.ruleId, "cargo-credentials");
+  assert.equal(policy.evaluate("run", { file: "/home/me/.cargo/registry/index" }).denied, null);
+  assert.equal(policy.evaluate("run", { file: "/home/me/.vault-token" }).denied?.ruleId, "vault-token");
+  assert.equal(policy.evaluate("run", { file: "vault-token" }).denied, null);
+  assert.equal(policy.evaluate("read", { uri: "file:///home/me/%2edocker/config.json" }).denied?.ruleId, "docker-credentials");
 });
 
 test("warn rules do not deny", () => {

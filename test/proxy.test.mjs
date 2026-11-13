@@ -336,6 +336,11 @@ test("policy: a call that reaches for credentials is denied and never reaches th
       "tar cf - .aws",
       "cat .ssh/config",
       "type .npmrc",
+      "/home/me/.docker/config.json",
+      "cat .config/gh/hosts.yml",
+      "/home/me/.gnupg/pubring.kbx",
+      "/home/me/.cargo/credentials.toml",
+      "cat .vault-token",
     ]) {
       const res = await s.call("read_file", { path });
       assert.equal(res.result.isError, true, `${path} should be denied`);
