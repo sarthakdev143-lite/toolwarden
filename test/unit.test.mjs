@@ -113,6 +113,22 @@ test("default policy catches credential paths in nested arguments", () => {
   assert.equal(policy.evaluate("run", { file: "notrclone.conf" }).denied, null);
 });
 
+test("a credential path hidden in base64 blob or image data is denied", () => {
+  const policy = new Policy(DEFAULT_RULES);
+  const ssh = Buffer.from("cat ~/.ssh/id_rsa").toString("base64");
+  const aws = Buffer.from("C:\\Users\\me\\.aws\\credentials").toString("base64");
+  const encoded = Buffer.from("/%2essh/id_rsa").toString("base64");
+  const notes = Buffer.from("Meeting notes for Thursday.").toString("base64");
+  const lookalike = Buffer.from("notes.ssh").toString("base64");
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).toString("base64");
+  assert.equal(policy.evaluate("run", { blob: ssh }).denied?.ruleId, "ssh-keys");
+  assert.equal(policy.evaluate("run", { content: [{ type: "image", data: aws }] }).denied?.ruleId, "cloud-credentials");
+  assert.equal(policy.evaluate("run", { content: [{ type: "audio", data: encoded }] }).denied?.ruleId, "ssh-keys");
+  assert.equal(policy.evaluate("run", { blob: notes }).denied, null);
+  assert.equal(policy.evaluate("run", { blob: lookalike }).denied, null);
+  assert.equal(policy.evaluate("run", { data: png }).denied, null);
+});
+
 test("warn rules do not deny", () => {
   const policy = new Policy([{ id: "curl", pattern: "curl ", action: "warn", message: "runs curl" }]);
   const v = policy.evaluate("shell", { command: "curl https://example.com" });

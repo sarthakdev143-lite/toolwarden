@@ -1,11 +1,12 @@
 import { existsSync, readFileSync } from "node:fs";
 import { includePercentDecoded } from "./percent.js";
+import { collectText } from "./scan.js";
 
 export interface Rule {
   id: string;
   /** Glob over the tool name. "*" matches anything. Defaults to "*". */
   tool?: string;
-  /** Regular expression (case-insensitive) tested against every string value in the call, other than a tool call's name. */
+  /** Regular expression (case-insensitive) tested against every string in the call, other than a tool call's name, including text stored in a base64 blob or in image and audio data. */
   pattern: string;
   /** "deny" blocks the call. "warn" lets it through and records a warning. Defaults to "deny". */
   action?: "deny" | "warn";
@@ -114,16 +115,6 @@ function globToRegExp(glob: string): RegExp {
   return new RegExp("^" + escaped + "$");
 }
 
-function collectStrings(value: unknown, out: string[]): void {
-  if (typeof value === "string") {
-    out.push(value);
-  } else if (Array.isArray(value)) {
-    for (const v of value) collectStrings(v, out);
-  } else if (value !== null && typeof value === "object") {
-    for (const v of Object.values(value as Record<string, unknown>)) collectStrings(v, out);
-  }
-}
-
 export interface Verdict {
   denied: { ruleId: string; message: string } | null;
   warnings: { ruleId: string; message: string }[];
@@ -175,9 +166,7 @@ export class Policy {
   }
 
   evaluate(toolName: string, args: unknown): Verdict {
-    const strings: string[] = [];
-    collectStrings(args, strings);
-    const candidates = includePercentDecoded(strings);
+    const candidates = includePercentDecoded(collectText(args));
     const verdict: Verdict = { denied: null, warnings: [] };
     for (const c of this.compiled) {
       if (!c.tool.test(toolName)) continue;

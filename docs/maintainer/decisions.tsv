@@ -132,3 +132,7 @@ ts	phase	decision	why	evidence	result
 2026-11-13T03:32:58Z	red	a credential in a model's reply to another server was not reported	sampling replies were forwarded without a flow check	test/results-flow.test.mjs	failed as expected, no cross-server warning
 2026-11-13T03:32:58Z	green	a reply that carries another server's credential is reported, and a deny rule stops it	a reply back to the same server is not a cross-server flow, and the audit log does not store the credential	npm test	62 pass, 0 fail
 2026-11-13T03:32:58Z	review	the sampling-reply change added no comments	the set name matches the elicitation answers that arrive later	comment review on the diff	0 comments removed
+2026-11-13T03:39:07Z	merge	merged sampling-reply checks after 5 CI checks passed	a credential in a model's reply to another server is reported, and a deny rule stops it	https://github.com/sarthakdev143-lite/toolwarden/pull/32	merged a3c6c48
+2026-11-13T03:39:07Z	red	a credential path stored in a base64 blob was allowed	argument rules did not decode blob or image data	test/unit.test.mjs	failed as expected, the ssh path was not denied
+2026-11-13T03:39:07Z	green	a path in a blob, in image data, or percent-encoded inside audio data is denied	ordinary text, a lookalike, and a real PNG stay allowed, and the denied calls never reach the server	npm test	64 pass, 0 fail
+2026-11-13T03:39:07Z	review	kept the rule comment that says blob and image data are matched	the field name does not say which strings a pattern sees	comment review on the diff	0 comments removed
