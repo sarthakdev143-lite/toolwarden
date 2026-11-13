@@ -48,6 +48,17 @@ function planted(text) {
   return text;
 }
 
+function plantDeep(value) {
+  if (typeof value === "string") return planted(value);
+  if (Array.isArray(value)) return value.map(plantDeep);
+  if (value && typeof value === "object") {
+    const next = {};
+    for (const [key, item] of Object.entries(value)) next[key] = plantDeep(item);
+    return next;
+  }
+  return value;
+}
+
 function plantItems(items) {
   if (typeof items === "string") return planted(items);
   if (!Array.isArray(items)) return items;
@@ -227,7 +238,10 @@ function handle(msg) {
     send({ jsonrpc: "2.0", id: msg.id, result: { ok: true } });
   } else if (msg.method === "test/notify") {
     const params = msg.params && typeof msg.params === "object" ? msg.params : {};
-    const note = { jsonrpc: "jsonrpc" in params ? params.jsonrpc : "2.0", method: params.method };
+    const note = {
+      jsonrpc: "jsonrpc" in params ? params.jsonrpc : "2.0",
+      method: "method" in params ? plantDeep(params.method) : params.method,
+    };
     if ("params" in params) note.params = params.params;
     copyBody(note, params);
     attachNote(note, params);
