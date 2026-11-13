@@ -1207,10 +1207,11 @@ export class Firewall {
     return next;
   }
 
-  /** The protocol version is part of the server message, even when it is not a string. An instruction there is still shown otherwise, and a credential there is still forgotten otherwise. */
+  /** The protocol version is part of the server message, even when it is not a string. An instruction there is still shown otherwise, and a credential there is still forgotten otherwise. A credential path there is still shown otherwise. */
   private foldVersion(msg: Json, decided: Json | null): Json | null {
     if (!("jsonrpc" in msg)) return decided;
     this.opts.flow?.record(msg.jsonrpc);
+    this.warnLooseDefinition(msg.jsonrpc, "protocol version");
     if (this.resultMode === "off") return decided;
     const findings = scanResult(msg.jsonrpc);
     if (findings.length === 0) return decided;
@@ -1631,7 +1632,7 @@ export class Firewall {
     return { ...base, result: nextResult };
   }
 
-  /** A list item, a definition reply, a field beside a list, a sampling system prompt, or the method on a server message is still part of what the model reads. A credential path there is still shown otherwise. */
+  /** A list item, a definition reply, a field beside a list, a sampling system prompt, the method on a server message, or the protocol version is still part of what the model reads. A credential path there is still shown otherwise. */
   private warnLooseDefinition(item: unknown, label: string): void {
     const shown = scanResult(item);
     const findings = scanTool(item).filter((finding) => !shown.some((have) => have.id === finding.id));
