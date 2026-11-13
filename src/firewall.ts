@@ -1641,7 +1641,7 @@ export class Firewall {
     return { ...base, result: nextResult };
   }
 
-  /** A list item, a definition reply, a field beside a list, a sampling system prompt, a sampling message, any other field on a sampling request, the method on a server message, the protocol version, a value that is not a JSON-RPC object, the id of a server message, a field beside a server message, parameters that are not an object, a result or an error on a server request or notification, a progress token, an elicitation question, a resource update, any other server notice, a cancellation id, a prompt result, including one that is not an object, the uri of a returned resource, or a field beside that resource is still part of what the model reads. A credential path there is still shown otherwise. */
+  /** A list item, a definition reply, a field beside a list, a sampling system prompt, a sampling message, any other field on a sampling request, the method on a server message, the protocol version, a value that is not a JSON-RPC object, the id of a server message, a field beside a server message, parameters that are not an object, a result or an error on a server request or notification, a progress token, an elicitation question, a resource update, any other server notice, a cancellation id, a prompt result, including one that is not an object, the uri of a returned resource, a field beside that resource, or a field beside tool output is still part of what the model reads. A credential path there is still shown otherwise. */
   private warnLooseDefinition(item: unknown, label: string): void {
     const shown = scanResult(item);
     const findings = scanTool(item).filter((finding) => !shown.some((have) => have.id === finding.id));
@@ -2049,11 +2049,31 @@ export class Firewall {
     return { ...msg, params: nextParams };
   }
 
-  /** A prompt result is text the model follows. An instruction there is still shown otherwise. A credential path there is still shown otherwise. The uri on a returned resource says which resource the text came from. A credential path there is still shown otherwise. A field beside that resource, other than the document text, is still part of what the model reads. A credential path there is still shown otherwise. */
+  /** A prompt result is text the model follows. An instruction there is still shown otherwise. A credential path there is still shown otherwise. The uri on a returned resource says which resource the text came from. A credential path there is still shown otherwise. A field beside that resource, other than the document text, is still part of what the model reads. A credential path there is still shown otherwise. A field beside tool output, other than the content the tool returned, is still part of what the model reads. A credential path there is still shown otherwise. */
   private checkResult(msg: Json, result: Json, label: string, kind: "tool" | "resource" | "prompt"): Json | null {
     const { server, audit } = this.opts;
     this.opts.flow?.record(result);
     if (kind === "prompt") this.warnLooseDefinition(result, "prompt result");
+    if (kind === "tool") {
+      const side: Json = {};
+      for (const [key, value] of Object.entries(result)) {
+        if (key !== "content" && key !== "structuredContent") side[key] = value;
+      }
+      if (Array.isArray(result.content)) {
+        const items: Json[] = [];
+        for (const item of result.content) {
+          if (!isObject(item)) continue;
+          const itemSide: Json = {};
+          for (const [key, value] of Object.entries(item)) {
+            if (key === "text" || key === "data" || key === "blob" || key === "uri" || key === "resource") continue;
+            itemSide[key] = value;
+          }
+          if (Object.keys(itemSide).length > 0) items.push(itemSide);
+        }
+        if (items.length > 0) side.content = items;
+      }
+      if (Object.keys(side).length > 0) this.warnLooseDefinition(side, "field beside the tool");
+    }
     if (kind === "resource") {
       const side: Json = {};
       for (const [key, value] of Object.entries(result)) {
