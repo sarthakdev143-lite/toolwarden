@@ -2054,6 +2054,7 @@ export class Firewall {
     for (const tool of tools) {
       const name = isObject(tool) ? tool.name : undefined;
       if (typeof name !== "string") {
+        if (isObject(tool)) this.looseTool(tool);
         kept.push(tool);
         continue;
       }
@@ -2132,6 +2133,14 @@ export class Firewall {
     if (dirty) savePins(this.opts.stateDir, this.pins);
     this.opts.flow?.record(kept);
     return kept;
+  }
+
+  /** A tool whose name is not a string is still a definition the model reads. An instruction there is still shown otherwise. */
+  private looseTool(tool: unknown): void {
+    const alertKey = "loose-tool:" + hashTool(tool);
+    if (this.alerted.has(alertKey)) return;
+    this.alerted.add(alertKey);
+    this.warnOnFindings("tool", tool);
   }
 
   private warnOnFindings(name: string, tool: unknown): void {
