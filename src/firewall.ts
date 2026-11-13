@@ -54,15 +54,18 @@ function annotateIntro(result: Json, text: string): Json {
   return { ...result, instructions };
 }
 
-function withholdIntro(result: Json, text: string): Json {
-  const next: Json = { ...result, instructions: text };
-  if (!isObject(result.serverInfo)) return next;
-  const info: Json = { ...result.serverInfo };
-  for (const key of ["name", "title", "version"]) {
-    if (typeof info[key] === "string" && scanResult(info[key]).length > 0) info[key] = "withheld";
+function scrubSuspicious(value: unknown): unknown {
+  if (typeof value === "string") return scanResult(value).length > 0 ? "withheld" : value;
+  if (Array.isArray(value)) return value.map(scrubSuspicious);
+  if (isObject(value)) {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, scrubSuspicious(v)]));
   }
-  next.serverInfo = info;
-  return next;
+  return value;
+}
+
+function withholdIntro(result: Json, text: string): Json {
+  const scrubbed = scrubSuspicious(result);
+  return { ...(isObject(scrubbed) ? scrubbed : {}), instructions: text };
 }
 
 function fieldsBesideToolName(params: Json): unknown {
