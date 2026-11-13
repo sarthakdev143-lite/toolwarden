@@ -355,6 +355,33 @@ test("policy: a call that reaches for credentials is denied and never reaches th
   assert.deepEqual(box.serverCalls().map((c) => c.arguments.path), ["/home/me/project/src/environment.ts"]);
 });
 
+test("policy: a credential path hidden in base64 data never reaches the server", async () => {
+  const box = sandbox([READ_FILE]);
+  const ssh = Buffer.from("cat ~/.ssh/id_rsa").toString("base64");
+  const aws = Buffer.from("C:\\Users\\me\\.aws\\credentials").toString("base64");
+  const notes = Buffer.from("Meeting notes for Thursday.").toString("base64");
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).toString("base64");
+  const s = session(box);
+  try {
+    await s.listTools();
+    const hidden = await s.call("read_file", { blob: ssh });
+    assert.equal(hidden.result.isError, true, "a path inside a blob is denied");
+    assert.match(hidden.result.content[0].text, /Blocked by toolwarden policy/);
+    const image = await s.call("read_file", { data: aws });
+    assert.equal(image.result.isError, true, "a path inside image data is denied");
+    const ok = await s.call("read_file", { blob: notes });
+    assert.equal(ok.result.isError, false, "ordinary blob text is allowed");
+    const picture = await s.call("read_file", { data: png });
+    assert.equal(picture.result.isError, false, "a real image is allowed");
+  } finally {
+    await s.close();
+  }
+  assert.deepEqual(
+    box.serverCalls().map((c) => c.arguments.blob ?? c.arguments.data),
+    [notes, png],
+  );
+});
+
 test("policy: a credential outside the arguments object never reaches the server", async () => {
   const box = sandbox([READ_FILE]);
   const s = session(box);
