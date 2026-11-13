@@ -32,7 +32,7 @@ Usage:
 Options for "run" and "http":
   --name <id>          Name for this server (default: derived from the command or URL)
   --mode <block|warn>  block (default) stops bad calls; warn only reports them
-  --results <mode>     What to do when tool output, a completion suggestion, a completion error, a cancellation, a resource update, any other notification, any other server request, or the server's introduction
+  --results <mode>     What to do when tool output, a completion suggestion, a completion error, a cancellation, a resource update, any other notification, any other server request, the reply to any other client request, or the server's introduction
                        looks like instructions: annotate (default), warn, block, or off
   --policy <file>      Policy file with extra rules (default: <state>/policy.json if present)
   --no-default-rules   Turn off the built-in credential-path rules
