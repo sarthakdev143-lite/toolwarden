@@ -818,6 +818,71 @@ test("a completion argument that names credentials never reaches the server", as
   );
 });
 
+test("a filesystem root that names credentials never reaches the server", async () => {
+  const box = sandbox([ECHO]);
+  const project = { uri: "file:///home/me/project", name: "Project" };
+  const s = session(box);
+  try {
+    await s.listTools();
+    const first = s.wait(9003);
+    await s.request("test/roots", {});
+    const ask = await first;
+    assert.equal(ask.method, "roots/list");
+    s.send({ jsonrpc: "2.0", id: ask.id, result: { roots: [project] } });
+    const plain = await rootsReply(box);
+    assert.deepEqual(plain.result.roots, [project]);
+
+    const second = s.wait(9003);
+    await s.request("test/roots", {});
+    const again = await second;
+    s.send({
+      jsonrpc: "2.0",
+      id: again.id,
+      result: {
+        roots: [
+          { uri: "file:///home/me/.ssh", name: "keys" },
+          project,
+          { uri: "file:///home/me/%2eenv", name: "env" },
+        ],
+      },
+    });
+    const filtered = await rootsReply(box, 2);
+    assert.deepEqual(filtered.result.roots, [project]);
+    assert.doesNotMatch(JSON.stringify(box.serverCalls()), /\.ssh|%2eenv|\.env/);
+  } finally {
+    await s.close();
+  }
+  assert.match(s.stderr(), /DENIED root/);
+
+  const warning = session(box, ["--mode", "warn"]);
+  try {
+    await warning.listTools();
+    const incoming = warning.wait(9003);
+    await warning.request("test/roots", {});
+    const ask = await incoming;
+    warning.send({
+      jsonrpc: "2.0",
+      id: ask.id,
+      result: { roots: [{ uri: "file:///home/me/.ssh", name: "keys" }, project] },
+    });
+    const kept = await rootsReply(box, 3);
+    assert.equal(kept.result.roots.length, 2);
+  } finally {
+    await warning.close();
+  }
+  assert.match(warning.stderr(), /warn mode, not blocked/);
+});
+
+async function rootsReply(box, count = 1) {
+  const start = Date.now();
+  while (Date.now() - start < 2000) {
+    const found = box.serverCalls().filter((c) => Array.isArray(c.result?.roots));
+    if (found.length >= count) return found[count - 1];
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error("roots reply did not reach the server");
+}
+
 test("a resource subscription that names credentials never reaches the server", async () => {
   const box = sandbox([ECHO]);
   const s = session(box);

@@ -167,9 +167,13 @@ export function startHttpProxy(firewall: Firewall, opts: HttpProxyOptions): Prom
 
       if (parsedOk && Array.isArray(parsed)) {
         const forwarded: unknown[] = [];
+        let replaced = false;
         for (const item of parsed) {
           const d = firewall.onClientMessage(item, scope);
-          if (d.forward) forwarded.push(item);
+          if (d.send) {
+            forwarded.push(d.send);
+            replaced = true;
+          } else if (d.forward) forwarded.push(item);
           if (d.reply) extraReplies.push(d.reply);
         }
         if (forwarded.length === 0) {
@@ -180,10 +184,11 @@ export function startHttpProxy(firewall: Firewall, opts: HttpProxyOptions): Prom
           }
           return;
         }
-        if (forwarded.length !== parsed.length) body = JSON.stringify(forwarded);
+        if (replaced || forwarded.length !== parsed.length) body = JSON.stringify(forwarded);
       } else if (parsedOk) {
         const d = firewall.onClientMessage(parsed, scope);
-        if (!d.forward) {
+        if (d.send) body = JSON.stringify(d.send);
+        else if (!d.forward) {
           if (d.reply) res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(d.reply));
           else res.writeHead(202).end();
           return;

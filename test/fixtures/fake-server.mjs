@@ -50,6 +50,9 @@ function handle(msg) {
     };
     if (typeof msg.params?.instructions === "string") result.instructions = msg.params.instructions;
     send({ jsonrpc: "2.0", id: msg.id, result });
+  } else if (msg.method === "test/roots") {
+    send({ jsonrpc: "2.0", id: 9003, method: "roots/list" });
+    send({ jsonrpc: "2.0", id: msg.id, result: { ok: true } });
   } else if (msg.method === "test/sampling") {
     send({ jsonrpc: "2.0", id: 9001, method: "sampling/createMessage", params: msg.params });
     send({ jsonrpc: "2.0", id: msg.id, result: { ok: true } });
