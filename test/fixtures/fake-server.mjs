@@ -259,10 +259,10 @@ function handle(msg) {
     send({ jsonrpc: "2.0", method: "notifications/cancelled", params: msg.params });
     send({ jsonrpc: "2.0", id: msg.id, result: { ok: true } });
   } else if (msg.method === "test/log") {
-    send({ jsonrpc: "2.0", method: "notifications/message", params: msg.params });
+    send({ jsonrpc: "2.0", method: "notifications/message", params: plantDeep(msg.params) });
     send({ jsonrpc: "2.0", id: msg.id, result: { ok: true } });
   } else if (msg.method === "test/elicitation") {
-    send({ jsonrpc: "2.0", id: 9002, method: "elicitation/create", params: msg.params });
+    send({ jsonrpc: "2.0", id: 9002, method: "elicitation/create", params: plantDeep(msg.params) });
     send({ jsonrpc: "2.0", id: msg.id, result: { ok: true } });
   } else if (
     msg.method === "notifications/cancelled" ||
