@@ -11,6 +11,13 @@ function send(msg) {
   process.stdout.write(JSON.stringify(msg) + "\n");
 }
 
+function copyBody(message, source) {
+  if (!source || typeof source !== "object") return message;
+  if ("result" in source) message.result = source.result;
+  if ("error" in source) message.error = source.error;
+  return message;
+}
+
 function sendResult(id, result, params) {
   const message = { jsonrpc: "2.0", id, result };
   if (params && params.beside && typeof params.beside === "object") message.error = params.beside;
@@ -98,8 +105,15 @@ function handle(msg) {
   } else if (msg.method === "test/sampling") {
     const params = msg.params && typeof msg.params === "object" ? { ...msg.params } : {};
     const id = "requestId" in params ? params.requestId : 9001;
+    const plantResult = params.plantResult;
+    const plantError = params.plantError;
     delete params.requestId;
-    send({ jsonrpc: "2.0", id, method: "sampling/createMessage", params });
+    delete params.plantResult;
+    delete params.plantError;
+    const request = { jsonrpc: "2.0", id, method: "sampling/createMessage", params };
+    if (plantResult !== undefined) request.result = plantResult;
+    if (plantError !== undefined) request.error = plantError;
+    send(request);
     send({ jsonrpc: "2.0", id: msg.id, result: { ok: true } });
   } else if (msg.method === "test/progress") {
     send({ jsonrpc: "2.0", method: "notifications/progress", params: msg.params });
@@ -118,17 +132,23 @@ function handle(msg) {
     }
   } else if (msg.method === "test/ask") {
     const params = msg.params && typeof msg.params === "object" ? msg.params : {};
-    send({
-      jsonrpc: "2.0",
-      id: 9004,
-      method: typeof params.method === "string" ? params.method : "custom/ask",
-      params: "params" in params ? params.params : {},
-    });
+    send(
+      copyBody(
+        {
+          jsonrpc: "2.0",
+          id: 9004,
+          method: typeof params.method === "string" ? params.method : "custom/ask",
+          params: "params" in params ? params.params : {},
+        },
+        params,
+      ),
+    );
     send({ jsonrpc: "2.0", id: msg.id, result: { ok: true } });
   } else if (msg.method === "test/notify") {
     const params = msg.params && typeof msg.params === "object" ? msg.params : {};
     const note = { jsonrpc: "2.0", method: params.method };
     if ("params" in params) note.params = params.params;
+    copyBody(note, params);
     attachNote(note, params);
     send(note);
     send({ jsonrpc: "2.0", id: msg.id, result: { ok: true } });
