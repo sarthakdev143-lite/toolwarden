@@ -12,8 +12,9 @@ import { collectText } from "./scan.js";
  * they have seen through small files in the state directory. When a server
  * shows a tool definition, a catalog description, an introduction, a completion
  * suggestion, a completion error, a cancellation, a resource update, any
- * other notification, any other server request, the reply to any other
- * client request, or the reply to a resource subscription, or returns text, we remember
+ * other notification, any other server request, a request for filesystem
+ * roots, the reply to any other client request, or the reply to a resource
+ * subscription, or returns text, we remember
  * fingerprints (hashes, never the values) of the distinctive tokens in it. When
  * a call to a *different* server carries one of those tokens in its arguments,
  * in a filesystem root, in any other client message, in the answer to a

@@ -736,7 +736,7 @@ export class Firewall {
     if (msg.method === "notifications/progress") return this.checkProgress(msg);
     if (msg.method === "roots/list" && "id" in msg) {
       this.rootsIdsAwaitingAnswer.add(String(msg.id));
-      return null;
+      return this.checkNotice(msg);
     }
     if (typeof msg.method === "string") {
       if ("id" in msg) this.unknownRequestsAwaitingAnswer.set(String(msg.id), msg.method);

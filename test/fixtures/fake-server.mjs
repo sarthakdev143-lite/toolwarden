@@ -51,7 +51,15 @@ function handle(msg) {
     if (typeof msg.params?.instructions === "string") result.instructions = msg.params.instructions;
     send({ jsonrpc: "2.0", id: msg.id, result });
   } else if (msg.method === "test/roots") {
-    send({ jsonrpc: "2.0", id: 9003, method: "roots/list" });
+    const params = msg.params && typeof msg.params === "object" ? msg.params : {};
+    const request = { jsonrpc: "2.0", id: 9003, method: "roots/list" };
+    if (params.plant === "token") {
+      const token = "ghp_" + "a1B2c3D4".repeat(5);
+      request.params = { message: `your token is ${token}` };
+    } else if ("request" in params) {
+      request.params = params.request;
+    }
+    send(request);
     send({ jsonrpc: "2.0", id: msg.id, result: { ok: true } });
   } else if (msg.method === "test/sampling") {
     send({ jsonrpc: "2.0", id: 9001, method: "sampling/createMessage", params: msg.params });
