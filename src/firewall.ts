@@ -1365,6 +1365,7 @@ export class Firewall {
       this.pendingInits.delete(key);
       const paired = this.foldPairedError(msg, "initialize", "reply");
       if (isObject(msg.result)) return this.checkInstructions(paired ?? msg, msg.result) ?? paired;
+      if ("result" in msg) this.warnLooseDefinition(msg.result, "introduction");
       return this.foldReplyError(msg, "initialize");
     }
 
@@ -1375,7 +1376,10 @@ export class Firewall {
       const paired = this.foldPairedError(msg, "tools/list", "reply");
       const base = paired ?? msg;
       const result = base.result;
-      if (!isObject(result)) return this.foldReplyError(msg, "tools/list");
+      if (!isObject(result)) {
+        if ("result" in msg) this.warnLooseDefinition(msg.result, "tool");
+        return this.foldReplyError(msg, "tools/list");
+      }
       let listed: Json | null = null;
       if (Array.isArray(result.tools)) {
         const nextCursor = typeof result.nextCursor === "string" && result.nextCursor !== "" ? result.nextCursor : null;
@@ -1393,7 +1397,10 @@ export class Firewall {
       const method =
         catalog === "resource" ? "resources/list" : catalog === "prompt" ? "prompts/list" : "resources/templates/list";
       const paired = this.foldPairedError(msg, method, "reply");
-      if (!isObject(msg.result)) return this.foldReplyError(msg, method);
+      if (!isObject(msg.result)) {
+        if ("result" in msg) this.warnLooseDefinition(msg.result, catalog);
+        return this.foldReplyError(msg, method);
+      }
       const base = paired ?? msg;
       this.checkCatalog(msg.result, catalog);
       const itemKey = catalog === "resource" ? "resources" : catalog === "prompt" ? "prompts" : "resourceTemplates";
@@ -1622,7 +1629,7 @@ export class Firewall {
     return { ...base, result: nextResult };
   }
 
-  /** A list item that is not an object is still part of the list the model reads. A credential path there is still shown otherwise. */
+  /** A list item or a definition reply that is not an object is still part of what the model reads. A credential path there is still shown otherwise. */
   private warnLooseDefinition(item: unknown, label: string): void {
     const shown = scanResult(item);
     const findings = scanTool(item).filter((finding) => !shown.some((have) => have.id === finding.id));
