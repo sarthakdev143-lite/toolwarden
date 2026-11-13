@@ -1,8 +1,7 @@
 import { appendFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { SECRET_PATTERNS } from "./flow.js";
-import { percentDecoded } from "./percent.js";
-import { decodedBlob } from "./scan.js";
+import { decodedBlob, matchForms } from "./scan.js";
 
 export type AuditEvent =
   | "session_start"
@@ -28,20 +27,15 @@ export interface AuditRecord {
 
 const MAX_ARG_CHARS = 2000;
 
-function concealedText(value: string): string | null {
+function redactString(value: string): string {
   const blob = decodedBlob(value);
   const source = blob ?? value;
-  const percent = percentDecoded(source);
-  if (blob === null && percent === null) return null;
-  return percent ?? source;
-}
-
-function redactString(value: string): string {
-  const decoded = concealedText(value);
-  let out = decoded ?? value;
-  for (const pattern of SECRET_PATTERNS) out = out.replace(pattern, "[credential removed]");
-  if (decoded !== null && out === decoded) return value;
-  return out;
+  for (const form of matchForms(source)) {
+    let out = form;
+    for (const pattern of SECRET_PATTERNS) out = out.replace(pattern, "[credential removed]");
+    if (out !== form) return out;
+  }
+  return value;
 }
 
 function redact(value: unknown): unknown {
@@ -57,7 +51,8 @@ function redact(value: unknown): unknown {
 
 /**
  * Prepare call arguments for the log: credentials are removed, including from
- * object keys, and long payloads are truncated.
+ * object keys and from text written with a compatibility character or an
+ * invisible character, and long payloads are truncated.
  */
 export function summarizeArgs(args: unknown): unknown {
   const safe = redact(args ?? null);

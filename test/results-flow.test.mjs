@@ -1834,6 +1834,14 @@ test("fingerprints: secrets and long ids are found, plain words are not", () => 
   assert.deepEqual(extractFingerprints({ content: [{ type: "image", data: image }] }).secrets, extractFingerprints(FAKE_TOKEN).secrets);
   const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).toString("base64");
   assert.deepEqual(extractFingerprints({ contents: [{ blob: png }] }), { secrets: [], values: [] });
+  const split = FAKE_TOKEN.slice(0, 4) + "\u200B" + FAKE_TOKEN.slice(4);
+  const wide = [...FAKE_TOKEN].map((ch) => String.fromCodePoint(ch.codePointAt(0) + 0xfee0)).join("");
+  assert.deepEqual(extractFingerprints(split).secrets, extractFingerprints(FAKE_TOKEN).secrets);
+  assert.deepEqual(extractFingerprints(wide).secrets, extractFingerprints(FAKE_TOKEN).secrets);
+  assert.deepEqual(
+    extractFingerprints(FAKE_TOKEN.slice(0, 4) + encodeURIComponent("\u200B") + FAKE_TOKEN.slice(4)).secrets,
+    extractFingerprints(FAKE_TOKEN).secrets,
+  );
 });
 
 test("an encoded credential is removed from the log, and ordinary encoding is kept", () => {
@@ -1844,6 +1852,8 @@ test("an encoded credential is removed from the log, and ordinary encoding is ke
   assert.match(logged, /\[credential removed\]/);
   assert.deepEqual(summarizeArgs({ body: `posting ${FAKE_TOKEN}` }), { body: "posting [credential removed]" });
   assert.deepEqual(summarizeArgs({ [FAKE_TOKEN]: "hello" }), { "[credential removed]": "hello" });
+  const split = FAKE_TOKEN.slice(0, 4) + "\u200B" + FAKE_TOKEN.slice(4);
+  assert.deepEqual(summarizeArgs({ body: `posting ${split}` }), { body: "posting [credential removed]" });
   assert.deepEqual(summarizeArgs({ q: "notes%20copy.md" }), { q: "notes%20copy.md" });
 
   const blob = Buffer.from(FAKE_TOKEN, "utf8").toString("base64");
@@ -2775,6 +2785,34 @@ test("flow: a credential pasted into another server's question is reported", asy
     await gated.close();
   }
   assert.equal(box.serverCalls().length, before, "a denied answer never reaches the server");
+});
+
+test("flow: a credential hidden by an invisible character is reported", async () => {
+  const box = sandbox([ECHO, SEND]);
+  const split = FAKE_TOKEN.slice(0, 4) + "\u200B" + FAKE_TOKEN.slice(4);
+  const vault = session(box, [], "vault");
+  try {
+    await vault.listTools();
+    await vault.call("echo", { echo: `your token is ${FAKE_TOKEN}` });
+    await vault.call("send", { body: split });
+  } finally {
+    await vault.close();
+  }
+  assert.doesNotMatch(vault.stderr(), /returned \d+ minute/);
+
+  const web = session(box, [], "web");
+  try {
+    await web.listTools();
+    const res = await web.call("send", { body: split });
+    assert.equal(res.result.isError, false, "by default a flow is reported, not blocked");
+  } finally {
+    await web.close();
+  }
+  assert.match(web.stderr(), /WARNING call to "send" on "web" carries a credential that server "vault" returned/);
+  const logged = JSON.stringify(box.audit());
+  assert.equal(logged.includes(FAKE_TOKEN), false);
+  assert.equal(logged.includes(FAKE_TOKEN.slice(4)), false, "the disguised credential is not stored");
+  assert.ok(JSON.stringify(box.serverCalls()).includes(FAKE_TOKEN.slice(4)), "by default the call is still delivered");
 });
 
 test("flow: a credential used as an object key is reported", async () => {
