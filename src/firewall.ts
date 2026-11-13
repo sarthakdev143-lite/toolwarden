@@ -179,6 +179,7 @@ export class Firewall {
   private readonly pendingCatalogs = new Map<string, CatalogKind>();
   private readonly pendingInits = new Set<string>();
   private readonly elicitationIdsAwaitingAnswer = new Set<string>();
+  private readonly samplingIdsAwaitingAnswer = new Set<string>();
   private readonly listedThisCycle = new Set<string>();
   private readonly alerted = new Set<string>();
   private readonly resultMode: ResultMode;
@@ -202,11 +203,18 @@ export class Firewall {
   onClientMessage(msg: unknown, scope = ""): ClientDecision {
     if (!isObject(msg)) return { forward: true };
     if (typeof msg.method !== "string") {
-      if ("id" in msg && "result" in msg && this.elicitationIdsAwaitingAnswer.delete(String(msg.id))) {
-        const result = isObject(msg.result) ? msg.result : {};
-        const args = "content" in result ? result.content : result;
-        const flowed = this.flowDecision(msg, "elicitation", "answer", args);
-        if (flowed) return flowed;
+      if ("id" in msg && "result" in msg) {
+        const id = String(msg.id);
+        if (this.elicitationIdsAwaitingAnswer.delete(id)) {
+          const result = isObject(msg.result) ? msg.result : {};
+          const args = "content" in result ? result.content : result;
+          const flowed = this.flowDecision(msg, "elicitation", "answer", args);
+          if (flowed) return flowed;
+        }
+        if (this.samplingIdsAwaitingAnswer.delete(id)) {
+          const flowed = this.flowDecision(msg, "sampling", "answer", msg.result);
+          if (flowed) return flowed;
+        }
       }
       return { forward: true };
     }
@@ -460,7 +468,10 @@ export class Firewall {
    */
   onServerMessage(msg: unknown, scope = ""): Json | null {
     if (!isObject(msg)) return null;
-    if (msg.method === "sampling/createMessage" && "id" in msg) return this.checkSampling(msg);
+    if (msg.method === "sampling/createMessage" && "id" in msg) {
+      this.samplingIdsAwaitingAnswer.add(String(msg.id));
+      return this.checkSampling(msg);
+    }
     if (msg.method === "elicitation/create" && "id" in msg) {
       this.elicitationIdsAwaitingAnswer.add(String(msg.id));
       return this.checkElicit(msg);

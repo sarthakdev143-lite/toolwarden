@@ -738,6 +738,65 @@ test("flow: a credential hidden in a base64 blob is recognized when another serv
   assert.ok(!logText.includes(FAKE_TOKEN), "the audit log never stores the credential itself");
 });
 
+test("flow: a credential in a model's reply to another server is reported", async () => {
+  const box = sandbox([ECHO]);
+  const prompt = { messages: [{ role: "user", content: { type: "text", text: "Summarize the token." } }] };
+  const answer = {
+    role: "assistant",
+    content: { type: "text", text: `the token is ${FAKE_TOKEN}` },
+    model: "test",
+  };
+  const vault = session(box, [], "vault");
+  try {
+    await vault.listTools();
+    await vault.call("echo", { echo: `your token is ${FAKE_TOKEN}` });
+    const ask = vault.wait(9001);
+    await vault.request("test/sampling", prompt);
+    const incoming = await ask;
+    vault.send({ jsonrpc: "2.0", id: incoming.id, result: answer });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  } finally {
+    await vault.close();
+  }
+  assert.doesNotMatch(vault.stderr(), /returned \d+ minute/);
+
+  const web = session(box, [], "web");
+  try {
+    await web.listTools();
+    const ask = web.wait(9001);
+    await web.request("test/sampling", prompt);
+    const incoming = await ask;
+    web.send({ jsonrpc: "2.0", id: incoming.id, result: answer });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  } finally {
+    await web.close();
+  }
+
+  assert.match(web.stderr(), /WARNING answer to "sampling" on "web" carries a credential that server "vault" returned/);
+  const logText = JSON.stringify(box.audit());
+  assert.ok(!logText.includes(FAKE_TOKEN), "the audit log never stores the credential itself");
+  assert.ok(JSON.stringify(box.serverCalls()).includes(FAKE_TOKEN), "by default the reply is still delivered");
+
+  const policyFile = join(box.dir, "policy.json");
+  writeFileSync(policyFile, JSON.stringify({ flows: [{ id: "vault-stays-put", from: "vault", to: "*", action: "deny" }] }));
+  const before = box.serverCalls().length;
+  const gated = session(box, ["--policy", policyFile], "web");
+  try {
+    await gated.listTools();
+    const ask = gated.wait(9001);
+    await gated.request("test/sampling", prompt);
+    const incoming = await ask;
+    const denied = gated.wait(incoming.id);
+    gated.send({ jsonrpc: "2.0", id: incoming.id, result: answer });
+    const reply = await denied;
+    assert.match(reply.error.message, /Blocked by toolwarden/);
+    assert.doesNotMatch(reply.error.message, new RegExp(FAKE_TOKEN));
+  } finally {
+    await gated.close();
+  }
+  assert.equal(box.serverCalls().length, before, "a denied reply never reaches the server");
+});
+
 test("flow: a credential pasted into another server's question is reported", async () => {
   const box = sandbox([ECHO]);
   const question = {
