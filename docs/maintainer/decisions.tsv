@@ -53,3 +53,7 @@ ts	phase	decision	why	evidence	result
 2026-11-13T01:16:14Z	red	file:///%2eenv was forwarded and the server returned the secret	checks compared the encoded text, and a server decodes a path before opening it	test/results-flow.test.mjs	failed as expected, the response was SECRET
 2026-11-13T01:16:14Z	green	one percent-decoding is applied before policy, result scans, and flow fingerprints	a broken sequence such as %FF does not throw, and notes%20copy.md is still allowed	npm test	47 pass, 0 fail
 2026-11-13T01:16:14Z	review	comment review removed the decoder comments	the ASCII-only fallback is a named function	comment review on the diff	3 comments removed
+2026-11-13T01:20:43Z	merge	merged percent-decoding after 5 CI checks passed	one layer of percent-encoding is decoded before policy, scans, and flow fingerprints	https://github.com/sarthakdev143-lite/toolwarden/pull/13	merged 4d08185
+2026-11-13T01:20:43Z	red	an encoded token was written to the argument summary unchanged	redaction matched the raw text, so ghp_%61... stayed in the log and decoded back to the token	node script on summarizeArgs	the logged body still contained ghp_%61
+2026-11-13T01:20:43Z	green	an encoded credential is replaced in the log, a plain credential still is, and notes%20copy.md is kept	the log stores the redacted text, not a decodable copy	npm test	48 pass, 0 fail
+2026-11-13T01:20:43Z	review	comment review found no new comments to remove	the diff is the redaction and the test	comment review on the diff	0 deletions

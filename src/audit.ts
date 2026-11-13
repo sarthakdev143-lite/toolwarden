@@ -1,6 +1,7 @@
 import { appendFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { SECRET_PATTERNS } from "./flow.js";
+import { percentDecoded } from "./percent.js";
 
 export type AuditEvent =
   | "session_start"
@@ -27,12 +28,17 @@ export interface AuditRecord {
 const MAX_ARG_CHARS = 2000;
 
 /** Replace credential-shaped strings, so the log never becomes a place secrets are stored. */
+function redactString(value: string): string {
+  const decoded = percentDecoded(value);
+  const source = decoded ?? value;
+  let out = source;
+  for (const pattern of SECRET_PATTERNS) out = out.replace(pattern, "[credential removed]");
+  if (decoded !== null && out === decoded) return value;
+  return out;
+}
+
 function redact(value: unknown): unknown {
-  if (typeof value === "string") {
-    let out = value;
-    for (const pattern of SECRET_PATTERNS) out = out.replace(pattern, "[credential removed]");
-    return out;
-  }
+  if (typeof value === "string") return redactString(value);
   if (Array.isArray(value)) return value.map(redact);
   if (value !== null && typeof value === "object") {
     return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, redact(v)]));
