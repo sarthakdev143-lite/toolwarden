@@ -156,7 +156,7 @@ function handle(msg) {
     if (typeof msg.params?.nextCursor === "string") result.nextCursor = msg.params.nextCursor;
     send({ jsonrpc: "2.0", id: msg.id, result });
   } else if (msg.method === "prompts/list") {
-    const prompts = Array.isArray(msg.params?.prompts) ? msg.params.prompts : [];
+    const prompts = msg.params && "prompts" in msg.params ? msg.params.prompts : [];
     send({ jsonrpc: "2.0", id: msg.id, result: { prompts } });
   } else if (msg.method === "resources/templates/list") {
     const resourceTemplates = Array.isArray(msg.params?.resourceTemplates) ? msg.params.resourceTemplates : [];
