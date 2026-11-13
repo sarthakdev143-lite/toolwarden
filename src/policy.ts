@@ -32,29 +32,28 @@ export interface PolicyFile {
   flows?: FlowRule[];
 }
 
-/**
- * Built-in rules: no tool call may reference well-known credential locations.
- * These exist to stop the most common exfiltration target, not to be complete.
- */
+/** "=" is not a path edge, so a search for the text ".env" stays allowed. */
+const PATH_EDGE = "(^|[\\\\/\\s'\"`])";
+
 export const DEFAULT_RULES: Rule[] = [
   {
     id: "ssh-keys",
-    pattern: "(^|[\\\\/])\\.ssh($|[^\\w.-])|\\bid_(rsa|ed25519|ecdsa|dsa)\\b",
+    pattern: PATH_EDGE + "\\.ssh($|[^\\w.-])|\\bid_(rsa|ed25519|ecdsa|dsa)\\b",
     message: "references SSH keys",
   },
   {
     id: "cloud-credentials",
-    pattern: "(^|[\\\\/])\\.(aws|azure|kube)($|[^\\w.-])|\\.config[\\\\/]gcloud($|[^\\w.-])",
+    pattern: PATH_EDGE + "\\.(aws|azure|kube)($|[^\\w.-])|\\.config[\\\\/]gcloud($|[^\\w.-])",
     message: "references cloud credentials",
   },
   {
     id: "env-files",
-    pattern: "(^|[\\\\/])\\.env(\\.[\\w.-]+)?($|[^\\w.-])",
+    pattern: PATH_EDGE + "\\.env(\\.[\\w.-]+)?($|[^\\w.-])",
     message: "references a .env file",
   },
   {
     id: "package-tokens",
-    pattern: "(^|[\\\\/])\\.(npmrc|pypirc|netrc|git-credentials)($|[^\\w.-])",
+    pattern: PATH_EDGE + "\\.(npmrc|pypirc|netrc|git-credentials)($|[^\\w.-])",
     message: "references a file that stores access tokens",
   },
 ];
