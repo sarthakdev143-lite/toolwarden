@@ -406,13 +406,27 @@ export class Firewall {
       return { forward: true };
     }
 
+    return this.checkUnhandled(msg);
+  }
+
+  private checkUnhandled(msg: Json): ClientDecision {
+    const body: Json = {};
+    for (const [key, value] of Object.entries(msg)) {
+      if (key === "jsonrpc" || key === "id" || key === "method") continue;
+      body[key] = value;
+    }
+    const label = visibleLabel(typeof msg.method === "string" ? msg.method : "request");
+    const denied = this.policyDecision(msg, label, "other", body);
+    if (denied) return denied;
+    const flowed = this.flowDecision(msg, label, "other", body);
+    if (flowed) return flowed;
     return { forward: true };
   }
 
   private policyDecision(
     msg: Json,
     label: string,
-    kind: "resource" | "prompt" | "completion" | "subscribe",
+    kind: "resource" | "prompt" | "completion" | "subscribe" | "other",
     args: unknown,
   ): ClientDecision | null {
     const { server, audit } = this.opts;
@@ -445,7 +459,7 @@ export class Firewall {
       `Blocked by toolwarden policy: this request ${d.message} (rule "${d.ruleId}"). ` +
       `If the user really wants this, they need to change the toolwarden policy themselves.`;
     if (!("id" in msg)) return { forward: false };
-    if (kind === "completion" || kind === "subscribe") {
+    if (kind === "completion" || kind === "subscribe" || kind === "other") {
       return { forward: false, reply: { jsonrpc: "2.0", id: msg.id, error: { code: -32000, message: text } } };
     }
     return { forward: false, reply: { jsonrpc: "2.0", id: msg.id, result: this.placeNotice({}, kind, text, true) } };
@@ -454,7 +468,7 @@ export class Firewall {
   private flowDecision(
     msg: Json,
     label: string,
-    kind: "tool" | "resource" | "prompt" | "answer" | "completion" | "subscribe",
+    kind: "tool" | "resource" | "prompt" | "answer" | "completion" | "subscribe" | "other",
     args: unknown,
   ): ClientDecision | null {
     const { server, audit } = this.opts;
@@ -474,7 +488,8 @@ export class Firewall {
         const text =
           `Blocked by toolwarden policy: this ${noun} ${reason}, and the user's policy does not allow ` +
           `data to move from "${hit.from}" to "${server}" (rule "${ruleId}").`;
-        if (kind === "answer" || kind === "completion" || kind === "subscribe") {
+        if (kind === "other" && !("id" in msg)) return { forward: false };
+        if (kind === "answer" || kind === "completion" || kind === "subscribe" || kind === "other") {
           return {
             forward: false,
             reply: { jsonrpc: "2.0", id: msg.id, error: { code: -32000, message: text } },

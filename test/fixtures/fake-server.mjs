@@ -77,6 +77,17 @@ function handle(msg) {
   } else if (msg.method === "test/elicitation") {
     send({ jsonrpc: "2.0", id: 9002, method: "elicitation/create", params: msg.params });
     send({ jsonrpc: "2.0", id: msg.id, result: { ok: true } });
+  } else if (
+    msg.method === "notifications/cancelled" ||
+    msg.method === "logging/setLevel" ||
+    msg.method === "custom/read"
+  ) {
+    if (callsFile) {
+      const seen = { method: msg.method, params: msg.params };
+      if (msg.note !== undefined) seen.note = msg.note;
+      appendFileSync(callsFile, JSON.stringify(seen) + "\n");
+    }
+    if (msg.id !== undefined) send({ jsonrpc: "2.0", id: msg.id, result: { ok: true } });
   } else if (msg.method === "tools/list") {
     send({ jsonrpc: "2.0", id: msg.id, result: listResult(msg.params?.cursor) });
   } else if (msg.method === "resources/list") {
