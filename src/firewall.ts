@@ -123,7 +123,9 @@ function annotateSampling(params: Json, text: string, messages: unknown): Json {
     if (key === "messages" || key === "systemPrompt") continue;
     next[key] = prefixSuspicious(value, text);
   }
-  if (typeof params.systemPrompt === "string" && params.systemPrompt !== "") next.systemPrompt = text + "\n\n" + params.systemPrompt;
+  if (typeof params.systemPrompt === "string") {
+    if (params.systemPrompt !== "") next.systemPrompt = text + "\n\n" + params.systemPrompt;
+  } else if ("systemPrompt" in params) next.systemPrompt = keepShown(params.systemPrompt, text);
   return next;
 }
 
@@ -2008,7 +2010,7 @@ export class Firewall {
     return { ...msg, params: withhold ? withholdElicit(text) : annotateElicit(params, text) };
   }
 
-  /** The system prompt is instructions the model follows. A credential path there is still shown otherwise. A sampling message is what the model is asked to answer. A credential path there is still shown otherwise. Any other field on that request is still part of it. A credential path there is still shown otherwise. An instruction in that message is still shown with a notice in front, including when the message is not a list. */
+  /** The system prompt is instructions the model follows. A credential path there is still shown otherwise. An instruction there is still shown with a notice in front, including when the prompt is not a string. A sampling message is what the model is asked to answer. A credential path there is still shown otherwise. Any other field on that request is still part of it. A credential path there is still shown otherwise. An instruction in that message is still shown with a notice in front, including when the message is not a list. */
   private checkSampling(msg: Json): Json | null {
     const params = isObject(msg.params) ? msg.params : {};
     this.opts.flow?.record(params);
