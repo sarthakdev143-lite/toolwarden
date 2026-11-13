@@ -614,6 +614,7 @@ export class Firewall {
   }
 
   private checkInstructions(msg: Json, result: Json): Json | null {
+    this.opts.flow?.record(result);
     if (this.resultMode === "off") return null;
     const findings = scanResult(result);
     if (findings.length === 0) return null;
