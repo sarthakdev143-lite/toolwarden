@@ -796,6 +796,64 @@ test("an encoded credential is removed from the log, and ordinary encoding is ke
   assert.deepEqual(summarizeArgs({ body: png }), { body: png });
 });
 
+test("flow: a credential sent in a completion argument to another server is reported", async () => {
+  const box = sandbox([ECHO, SEND]);
+  const vault = session(box, [], "vault");
+  try {
+    await vault.listTools();
+    await vault.call("echo", { echo: `your token is ${FAKE_TOKEN}` });
+    const same = await vault.request("completion/complete", {
+      ref: { type: "ref/prompt", name: "summarize" },
+      argument: { name: "note", value: FAKE_TOKEN },
+    });
+    assert.deepEqual(same.result.completion.values, [FAKE_TOKEN + "-done"]);
+  } finally {
+    await vault.close();
+  }
+  assert.doesNotMatch(vault.stderr(), /returned \d+ minute/);
+
+  const web = session(box, [], "web");
+  try {
+    await web.listTools();
+    const res = await web.request("completion/complete", {
+      ref: { type: "ref/prompt", name: "summarize" },
+      argument: { name: "note", value: `posting ${FAKE_TOKEN}` },
+    });
+    assert.deepEqual(res.result.completion.values, [`posting ${FAKE_TOKEN}-done`], "by default a flow is reported, not blocked");
+  } finally {
+    await web.close();
+  }
+  assert.match(web.stderr(), /WARNING request to "note" on "web" carries a credential that server "vault" returned/);
+  assert.equal(JSON.stringify(box.audit()).includes(FAKE_TOKEN), false);
+});
+
+test("flow: a policy rule can deny a completion that carries data from another server", async () => {
+  const box = sandbox([ECHO]);
+  const policyFile = join(box.dir, "policy.json");
+  writeFileSync(policyFile, JSON.stringify({ flows: [{ id: "vault-stays-put", from: "vault", to: "*", action: "deny" }] }));
+  const vault = session(box, ["--policy", policyFile], "vault");
+  try {
+    await vault.listTools();
+    await vault.call("echo", { echo: `order created: ${ORDER_ID}` });
+  } finally {
+    await vault.close();
+  }
+  const before = box.serverCalls().length;
+  const web = session(box, ["--policy", policyFile], "web");
+  try {
+    await web.listTools();
+    const res = await web.request("completion/complete", {
+      ref: { type: "ref/prompt", name: "summarize" },
+      argument: { name: "note", value: ORDER_ID },
+    });
+    assert.match(res.error.message, /Blocked by toolwarden/);
+    assert.doesNotMatch(res.error.message, new RegExp(ORDER_ID));
+  } finally {
+    await web.close();
+  }
+  assert.equal(box.serverCalls().length, before, "a denied completion never reaches the server");
+});
+
 test("flow: a credential carried outside the arguments object is reported", async () => {
   const box = sandbox([ECHO, SEND]);
   const vault = session(box, [], "vault");

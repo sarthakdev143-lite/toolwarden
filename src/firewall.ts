@@ -317,6 +317,8 @@ export class Firewall {
       const name = typeof argument.name === "string" && argument.name !== "" ? argument.name : "completion";
       const denied = this.policyDecision(msg, visibleLabel(name), "completion", params);
       if (denied) return denied;
+      const flowed = this.flowDecision(msg, visibleLabel(name), "completion", params);
+      if (flowed) return flowed;
       return { forward: true };
     }
 
@@ -368,7 +370,7 @@ export class Firewall {
   private flowDecision(
     msg: Json,
     label: string,
-    kind: "tool" | "resource" | "prompt" | "answer",
+    kind: "tool" | "resource" | "prompt" | "answer" | "completion",
     args: unknown,
   ): ClientDecision | null {
     const { server, audit } = this.opts;
@@ -388,7 +390,7 @@ export class Firewall {
         const text =
           `Blocked by toolwarden policy: this ${noun} ${reason}, and the user's policy does not allow ` +
           `data to move from "${hit.from}" to "${server}" (rule "${ruleId}").`;
-        if (kind === "answer") {
+        if (kind === "answer" || kind === "completion") {
           return {
             forward: false,
             reply: { jsonrpc: "2.0", id: msg.id, error: { code: -32000, message: text } },
