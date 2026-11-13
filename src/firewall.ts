@@ -3,7 +3,7 @@ import { hashTool } from "./canonical.js";
 import type { FlowTracker } from "./flow.js";
 import { loadPins, savePins, type PinFile } from "./pins.js";
 import type { Policy } from "./policy.js";
-import { scanResult, scanTool } from "./scan.js";
+import { noticeOnBlobs, scanResult, scanTool } from "./scan.js";
 
 export type Mode = "block" | "warn";
 
@@ -636,19 +636,19 @@ export class Firewall {
       const item = { uri: "toolwarden://notice", mimeType: "text/plain", text };
       if (withhold) return { contents: [item] };
       const contents = Array.isArray(result.contents) ? result.contents : [];
-      return { ...result, contents: [item, ...contents] };
+      return noticeOnBlobs({ ...result, contents: [item, ...contents] }, text) as Json;
     }
     if (kind === "prompt") {
       const message = { role: "user", content: { type: "text", text } };
       if (withhold) return { messages: [message] };
       const messages = Array.isArray(result.messages) ? result.messages : [];
-      return { ...result, messages: [message, ...messages] };
+      return noticeOnBlobs({ ...result, messages: [message, ...messages] }, text) as Json;
     }
     if (withhold) return { content: [{ type: "text", text }], isError: true };
     const content = Array.isArray(result.content) ? result.content : [];
     const next: Json = { ...result, content: [{ type: "text", text }, ...content] };
     if ("structuredContent" in result) next.structuredContent = prefixSuspicious(result.structuredContent, text);
-    return next;
+    return noticeOnBlobs(next, text) as Json;
   }
 
   private endTrust(): boolean {
