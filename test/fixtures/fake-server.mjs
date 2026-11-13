@@ -61,6 +61,9 @@ function handle(msg) {
   } else if (msg.method === "prompts/list") {
     const prompts = Array.isArray(msg.params?.prompts) ? msg.params.prompts : [];
     send({ jsonrpc: "2.0", id: msg.id, result: { prompts } });
+  } else if (msg.method === "resources/templates/list") {
+    const resourceTemplates = Array.isArray(msg.params?.resourceTemplates) ? msg.params.resourceTemplates : [];
+    send({ jsonrpc: "2.0", id: msg.id, result: { resourceTemplates } });
   } else if (msg.method === "resources/read") {
     if (callsFile) appendFileSync(callsFile, JSON.stringify({ method: msg.method, params: msg.params }) + "\n");
     const uri = typeof msg.params?.uri === "string" ? msg.params.uri : "file://doc";

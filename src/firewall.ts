@@ -48,6 +48,24 @@ function visibleLabel(label: string): string {
   return typeof safe === "string" ? safe : "[truncated]";
 }
 
+type CatalogKind = "resource" | "prompt" | "template";
+
+function textField(value: unknown, fallback: string): string {
+  return typeof value === "string" && value !== "" ? value : fallback;
+}
+
+function catalogItems(result: Json, kind: CatalogKind): unknown {
+  if (kind === "resource") return result.resources;
+  if (kind === "prompt") return result.prompts;
+  return result.resourceTemplates;
+}
+
+function catalogLabel(item: Json, kind: CatalogKind): string {
+  if (kind === "resource") return textField(item.uri, "resource");
+  if (kind === "prompt") return textField(item.name, "prompt");
+  return textField(item.uriTemplate, textField(item.name, "template"));
+}
+
 function annotateIntro(result: Json, text: string): Json {
   const current = result.instructions;
   const instructions = typeof current === "string" && current !== "" ? text + "\n\n" + current : text;
@@ -101,7 +119,7 @@ export class Firewall {
   private readonly pendingLists = new Set<string>();
   private readonly listCursors = new Map<string, string | null>();
   private readonly pendingCalls = new Map<string, { label: string; kind: "tool" | "resource" | "prompt" }>();
-  private readonly pendingCatalogs = new Map<string, "resource" | "prompt">();
+  private readonly pendingCatalogs = new Map<string, CatalogKind>();
   private readonly pendingInits = new Set<string>();
   private readonly listedThisCycle = new Set<string>();
   private readonly alerted = new Set<string>();
@@ -140,8 +158,13 @@ export class Firewall {
       return { forward: true };
     }
 
-    if ((msg.method === "resources/list" || msg.method === "prompts/list") && "id" in msg) {
-      this.pendingCatalogs.set(idKey(scope, msg.id), msg.method === "resources/list" ? "resource" : "prompt");
+    if (
+      (msg.method === "resources/list" || msg.method === "prompts/list" || msg.method === "resources/templates/list") &&
+      "id" in msg
+    ) {
+      const kind: CatalogKind =
+        msg.method === "resources/list" ? "resource" : msg.method === "prompts/list" ? "prompt" : "template";
+      this.pendingCatalogs.set(idKey(scope, msg.id), kind);
       return { forward: true };
     }
 
@@ -433,21 +456,13 @@ export class Firewall {
     return { ...msg, error: { ...error, message } };
   }
 
-  private checkCatalog(result: Json, kind: "resource" | "prompt"): void {
-    const items = kind === "resource" ? result.resources : result.prompts;
+  private checkCatalog(result: Json, kind: CatalogKind): void {
+    const items = catalogItems(result, kind);
     if (!Array.isArray(items)) return;
     const { server, audit } = this.opts;
     for (const item of items) {
       if (!isObject(item)) continue;
-      const raw =
-        kind === "resource"
-          ? typeof item.uri === "string" && item.uri !== ""
-            ? item.uri
-            : "resource"
-          : typeof item.name === "string" && item.name !== ""
-            ? item.name
-            : "prompt";
-      const label = visibleLabel(raw);
+      const label = visibleLabel(catalogLabel(item, kind));
       const findings = scanResult(item);
       if (findings.length === 0) continue;
       const hash = hashTool(item);
