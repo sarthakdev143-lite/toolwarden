@@ -950,6 +950,7 @@ export class Firewall {
     }
 
     if (dirty) savePins(this.opts.stateDir, this.pins);
+    this.opts.flow?.record(kept);
     return kept;
   }
 
