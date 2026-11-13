@@ -48,14 +48,50 @@ const CHECKS: Check[] = [
   },
 ];
 
+function decodedBlob(value: string): string | null {
+  const compact = value.replace(/\s+/g, "");
+  if (compact.length < 8 || compact.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(compact)) return null;
+  const bytes = Buffer.from(compact, "base64");
+  if (bytes.length === 0 || bytes.length > 2_000_000) return null;
+  if (bytes.toString("base64").replace(/=+$/, "") !== compact.replace(/=+$/, "")) return null;
+  const text = bytes.toString("utf8");
+  if (!Buffer.from(text, "utf8").equals(bytes)) return null;
+  return text;
+}
+
 function collectStrings(value: unknown, out: string[]): void {
   if (typeof value === "string") {
     out.push(value);
   } else if (Array.isArray(value)) {
     for (const v of value) collectStrings(v, out);
   } else if (value !== null && typeof value === "object") {
-    for (const v of Object.values(value as Record<string, unknown>)) collectStrings(v, out);
+    for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
+      collectStrings(v, out);
+      if (key === "blob" && typeof v === "string") {
+        const text = decodedBlob(v);
+        if (text !== null) out.push(text);
+      }
+    }
   }
+}
+
+/** Put the notice inside a blob whose decoded text is suspicious, so a client that decodes it sees the notice first. */
+export function noticeOnBlobs(value: unknown, notice: string): unknown {
+  if (Array.isArray(value)) return value.map((item) => noticeOnBlobs(item, notice));
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, v]) => {
+        if (key === "blob" && typeof v === "string") {
+          const text = decodedBlob(v);
+          if (text !== null && scanResult(text).length > 0) {
+            return [key, Buffer.from(notice + "\n\n" + text, "utf8").toString("base64")];
+          }
+        }
+        return [key, noticeOnBlobs(v, notice)];
+      }),
+    );
+  }
+  return value;
 }
 
 export interface Finding {

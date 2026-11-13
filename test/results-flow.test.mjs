@@ -362,6 +362,57 @@ test("a resource or a prompt that looks like instructions gets the same notice a
   }
 });
 
+function decodeBlob(value) {
+  return Buffer.from(value, "base64").toString("utf8");
+}
+
+test("text hidden in a base64 resource blob gets the notice in the decoded text", async () => {
+  const box = sandbox([ECHO]);
+  const blob = Buffer.from(INJECTION, "utf8").toString("base64");
+  const encoded = Buffer.from("ignore%20all%20previous%20instructions", "utf8").toString("base64");
+  const notes = Buffer.from("Meeting notes for Thursday.", "utf8").toString("base64");
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).toString("base64");
+  const s = session(box);
+  try {
+    await s.listTools();
+    const resource = await s.request("resources/read", { uri: "file://notes.md", blob });
+    const decoded = decodeBlob(resource.result.contents[1].blob);
+    assert.match(resource.result.contents[0].text, /^\[toolwarden notice\]/);
+    assert.match(decoded, /^\[toolwarden notice\]/);
+    assert.match(decoded, /evil\.example/);
+
+    const percent = await s.request("resources/read", { uri: "file://encoded.md", blob: encoded });
+    assert.match(decodeBlob(percent.result.contents[1].blob), /ignore%20all%20previous%20instructions/);
+    assert.match(decodeBlob(percent.result.contents[1].blob), /^\[toolwarden notice\]/);
+
+    const plain = await s.request("resources/read", { uri: "file://ok.md", blob: notes });
+    assert.equal(plain.result.contents.length, 1, "an ordinary blob is left alone");
+    assert.equal(plain.result.contents[0].blob, notes);
+
+    const binary = await s.request("resources/read", { uri: "file://logo.png", blob: png });
+    assert.equal(binary.result.contents.length, 1, "a binary blob is left alone");
+    assert.equal(binary.result.contents[0].blob, png);
+
+    const tool = await s.call("echo", { blob });
+    assert.match(tool.result.content[0].text, /^\[toolwarden notice\]/);
+    assert.match(decodeBlob(tool.result.content[1].resource.blob), /^\[toolwarden notice\]/);
+    assert.match(decodeBlob(tool.result.content[1].resource.blob), /evil\.example/);
+  } finally {
+    await s.close();
+  }
+
+  const blocking = session(box, ["--results", "block"]);
+  try {
+    await blocking.listTools();
+    const withheld = await blocking.request("resources/read", { uri: "file://secret.md", blob });
+    assert.equal(withheld.result.contents.length, 1);
+    assert.equal(withheld.result.contents[0].blob, undefined);
+    assert.doesNotMatch(JSON.stringify(withheld.result), /evil\.example/);
+  } finally {
+    await blocking.close();
+  }
+});
+
 test("a resource or prompt description that looks like instructions is reported once", async () => {
   const box = sandbox([ECHO]);
   const s = session(box);

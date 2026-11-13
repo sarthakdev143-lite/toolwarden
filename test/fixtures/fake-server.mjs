@@ -67,6 +67,10 @@ function handle(msg) {
   } else if (msg.method === "resources/read") {
     if (callsFile) appendFileSync(callsFile, JSON.stringify({ method: msg.method, params: msg.params }) + "\n");
     const uri = typeof msg.params?.uri === "string" ? msg.params.uri : "file://doc";
+    if (typeof msg.params?.blob === "string") {
+      send({ jsonrpc: "2.0", id: msg.id, result: { contents: [{ uri, mimeType: "text/plain", blob: msg.params.blob }] } });
+      return;
+    }
     const text = typeof msg.params?.text === "string" ? msg.params.text : "a plain document";
     send({ jsonrpc: "2.0", id: msg.id, result: { contents: [{ uri, mimeType: "text/plain", text }] } });
   } else if (msg.method === "prompts/get") {
@@ -85,6 +89,17 @@ function handle(msg) {
         error.data = msg.params.arguments.failData;
       }
       send({ jsonrpc: "2.0", id: msg.id, error });
+      return;
+    }
+    if (typeof msg.params?.arguments?.blob === "string") {
+      send({
+        jsonrpc: "2.0",
+        id: msg.id,
+        result: {
+          content: [{ type: "resource", resource: { uri: "file://out", mimeType: "text/plain", blob: msg.params.arguments.blob } }],
+          isError: false,
+        },
+      });
       return;
     }
     const result = {
