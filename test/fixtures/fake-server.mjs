@@ -74,12 +74,19 @@ function noteMarked(msg) {
   appendFileSync(callsFile, JSON.stringify({ method: msg.method, params: msg.params }) + "\n");
 }
 
+function noteVersion(msg) {
+  if (!callsFile || !msg || typeof msg !== "object" || Array.isArray(msg)) return;
+  if (msg.jsonrpc === undefined || msg.jsonrpc === "2.0") return;
+  appendFileSync(callsFile, JSON.stringify({ jsonrpc: msg.jsonrpc }) + "\n");
+}
+
 function handle(msg) {
   if (msg === null || typeof msg !== "object" || Array.isArray(msg)) {
     if (callsFile) appendFileSync(callsFile, JSON.stringify({ bare: msg }) + "\n");
     if (Array.isArray(msg)) for (const item of msg) handle(item);
     return;
   }
+  noteVersion(msg);
   if (msg.method === "initialize") {
     noteMarked(msg);
     if (msg.params && msg.params.error && typeof msg.params.error === "object") {

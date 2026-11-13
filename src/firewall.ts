@@ -319,6 +319,8 @@ export class Firewall {
 
   onClientMessage(msg: unknown, scope = ""): ClientDecision {
     if (!isObject(msg)) return this.foldBareClient(msg);
+    const version = this.versionDecision(msg);
+    if (version) return version;
     if (typeof msg.method !== "string") {
       if ("id" in msg) {
         const id = requestId(msg.id);
@@ -515,6 +517,15 @@ export class Firewall {
       this.unknownClientRequestsAwaitingReply.set(idKey(scope, msg.id), visibleLabel(msg.method));
     }
     return decision;
+  }
+
+  /** The protocol version is part of the client message. A credential path there still reaches the server otherwise. */
+  private versionDecision(msg: Json): ClientDecision | null {
+    if (!("jsonrpc" in msg)) return null;
+    const label = visibleLabel(typeof msg.method === "string" ? msg.method : "request");
+    const denied = this.policyDecision(msg, label, "other", msg.jsonrpc);
+    if (denied) return denied;
+    return this.flowDecision(msg, label, "other", msg.jsonrpc);
   }
 
   /** A value that is not a JSON-RPC object is still part of what the client sent. A credential path there still reaches the server otherwise. */

@@ -3858,6 +3858,106 @@ test("flow: a credential in a client value that is not a JSON-RPC object is repo
   assert.equal(JSON.stringify(box.audit()).includes(FAKE_TOKEN), false);
 });
 
+test("a credential path in the protocol version never reaches the server", async () => {
+  const box = sandbox([ECHO]);
+  const ssh = "file:///home/me/.ssh/id_rsa";
+  const encoded = "file:///home/me/%2essh/%69d_rsa";
+  const s = session(box);
+  try {
+    await s.listTools();
+    const called = s.wait("ver-call");
+    s.send({
+      jsonrpc: ssh,
+      id: "ver-call",
+      method: "tools/call",
+      params: { name: "echo", arguments: { echo: "marker-ver-path" } },
+    });
+    const blocked = await called;
+    assert.equal(blocked.error.code, -32000);
+    assert.match(blocked.error.message, /Blocked by toolwarden policy/);
+
+    const lined = s.wait("ver-line");
+    s.send({
+      jsonrpc: "note\n" + ssh,
+      id: "ver-line",
+      method: "tools/call",
+      params: { name: "echo", arguments: { echo: "marker-ver-line" } },
+    });
+    const broken = await lined;
+    assert.equal(broken.error.code, -32000);
+
+    const read = s.wait("ver-read");
+    s.send({ jsonrpc: encoded, id: "ver-read", method: "resources/read", params: { uri: "file:///tmp/readme" } });
+    const foreign = await read;
+    assert.equal(foreign.error.code, -32000);
+
+    const nested = s.wait("ver-nested");
+    s.send({ jsonrpc: { note: ssh }, id: "ver-nested", method: "ping" });
+    const object = await nested;
+    assert.equal(object.error.code, -32000);
+
+    const ok = await s.call("echo", { echo: "marker-ver-ok" });
+    assert.equal(ok.result.content[0].text, "marker-ver-ok");
+  } finally {
+    await s.close();
+  }
+  const calls = JSON.stringify(box.serverCalls());
+  assert.doesNotMatch(calls, /marker-ver-path|marker-ver-line|id_rsa|%2essh|\.ssh/);
+  assert.match(calls, /marker-ver-ok/);
+  assert.match(s.stderr(), /DENIED request "tools\/call"/);
+  assert.match(s.stderr(), /DENIED request "resources\/read"/);
+  assert.match(s.stderr(), /DENIED request "ping"/);
+
+  const warning = session(box, ["--mode", "warn"]);
+  try {
+    await warning.listTools();
+    const kept = warning.wait("ver-warn");
+    warning.send({
+      jsonrpc: ssh,
+      id: "ver-warn",
+      method: "tools/call",
+      params: { name: "echo", arguments: { echo: "marker-ver-warn" } },
+    });
+    const delivered = await kept;
+    assert.equal(delivered.result.content[0].text, "marker-ver-warn");
+  } finally {
+    await warning.close();
+  }
+  assert.match(warning.stderr(), /warn mode, not blocked/);
+  assert.match(JSON.stringify(box.serverCalls()), /marker-ver-warn/);
+  assert.match(JSON.stringify(box.serverCalls()), /id_rsa/);
+});
+
+test("flow: a credential in the protocol version is reported when another server is asked to send it", async () => {
+  const box = sandbox([ECHO, SEND]);
+  const vault = session(box, ["--results", "off"], "vault");
+  try {
+    await vault.listTools();
+    await vault.request("test/batch", { batch: [`your token is ${FAKE_TOKEN}`] });
+  } finally {
+    await vault.close();
+  }
+
+  const web = session(box, [], "web");
+  try {
+    await web.listTools();
+    const sent = web.wait("ver-flow");
+    web.send({
+      jsonrpc: `your token is ${FAKE_TOKEN}`,
+      id: "ver-flow",
+      method: "tools/call",
+      params: { name: "send", arguments: { body: "marker-ver-flow" } },
+    });
+    const res = await sent;
+    assert.equal(res.result.isError, false, "by default a flow is reported, not blocked");
+  } finally {
+    await web.close();
+  }
+  assert.match(web.stderr(), /WARNING request to "tools\/call" on "web" carries a credential that server "vault" returned/);
+  assert.match(JSON.stringify(box.serverCalls()), /marker-ver-flow/);
+  assert.equal(JSON.stringify(box.audit()).includes(FAKE_TOKEN), false);
+});
+
 test("a credential path in a request id never reaches the server", async () => {
   const box = sandbox([ECHO]);
   const ssh = "file:///home/me/.ssh/id_rsa";
