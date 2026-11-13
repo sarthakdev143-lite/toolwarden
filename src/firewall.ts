@@ -1999,19 +1999,31 @@ export class Firewall {
       const item = { uri: "toolwarden://notice", mimeType: "text/plain", text };
       if (withhold) return { contents: [item] };
       const contents = Array.isArray(result.contents) ? result.contents : [];
-      return noticeOnBlobs({ ...result, contents: [item, ...contents] }, text) as Json;
+      const next: Json = { ...result, contents: [item, ...contents] };
+      this.noticeBeside(next, "contents", text);
+      return noticeOnBlobs(next, text) as Json;
     }
     if (kind === "prompt") {
       const message = { role: "user", content: { type: "text", text } };
       if (withhold) return { messages: [message] };
       const messages = Array.isArray(result.messages) ? result.messages : [];
-      return noticeOnBlobs({ ...result, messages: [message, ...messages] }, text) as Json;
+      const next: Json = { ...result, messages: [message, ...messages] };
+      this.noticeBeside(next, "messages", text);
+      return noticeOnBlobs(next, text) as Json;
     }
     if (withhold) return { content: [{ type: "text", text }], isError: true };
     const content = Array.isArray(result.content) ? result.content : [];
     const next: Json = { ...result, content: [{ type: "text", text }, ...content] };
-    if ("structuredContent" in result) next.structuredContent = prefixSuspicious(result.structuredContent, text);
+    this.noticeBeside(next, "content", text);
     return noticeOnBlobs(next, text) as Json;
+  }
+
+  /** A field beside the text a tool, resource, or prompt returned is still part of that output. An instruction there is still shown otherwise. */
+  private noticeBeside(result: Json, skip: string, text: string): void {
+    for (const [key, value] of Object.entries(result)) {
+      if (key === skip) continue;
+      result[key] = prefixSuspicious(value, text);
+    }
   }
 
   private endTrust(): boolean {
