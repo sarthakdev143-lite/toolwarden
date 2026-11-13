@@ -14,9 +14,10 @@ import { collectText } from "./scan.js";
  * suggestion, a completion error, a cancellation, a resource update, or any
  * other notification, or returns text, we remember
  * fingerprints (hashes, never the values) of the distinctive tokens in it. When
- * a call to a *different* server carries one of those tokens in its arguments
- * or in a filesystem root, that is a data flow between servers: the pattern
- * behind "read a secret with one tool, send it out with another".
+ * a call to a *different* server carries one of those tokens in its arguments,
+ * in a filesystem root, or in any other client message, that is a data flow
+ * between servers: the pattern behind "read a secret with one tool, send it out
+ * with another".
  */
 
 export type FlowKind = "secret" | "value";

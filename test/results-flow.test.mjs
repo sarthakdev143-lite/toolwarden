@@ -1134,6 +1134,56 @@ test("flow: a credential in a filesystem root is reported when another server is
   assert.equal(JSON.stringify(box.audit()).includes(FAKE_TOKEN), false);
 });
 
+test("a client message the firewall does not already check never carries a credential path to the server", async () => {
+  const box = sandbox([ECHO]);
+  const s = session(box);
+  try {
+    await s.listTools();
+    s.send({
+      jsonrpc: "2.0",
+      method: "notifications/cancelled",
+      params: { requestId: "task-1", reason: "file:///home/me/.ssh/id_rsa" },
+    });
+    s.send({
+      jsonrpc: "2.0",
+      method: "notifications/cancelled",
+      params: { requestId: "task-2", reason: "the user closed the tab" },
+      note: "file:///home/me/.ssh/id_rsa",
+    });
+    s.send({
+      jsonrpc: "2.0",
+      method: "notifications/cancelled",
+      params: { requestId: "task-3", reason: "the user closed the tab" },
+    });
+    const level = await s.request("logging/setLevel", { level: "debug", note: "file:///home/me/.ssh/id_rsa" });
+    assert.equal(level.error.code, -32000);
+    assert.match(level.error.message, /Blocked by toolwarden policy/);
+    assert.doesNotMatch(JSON.stringify(level), /id_rsa/);
+    const encoded = await s.request("custom/read", { path: "file:///home/me/%2eenv" });
+    assert.equal(encoded.error.code, -32000);
+    assert.doesNotMatch(JSON.stringify(encoded), /%2eenv/);
+    const ok = await s.request("logging/setLevel", { level: "info" });
+    assert.deepEqual(ok.result, { ok: true });
+  } finally {
+    await s.close();
+  }
+  const calls = JSON.stringify(box.serverCalls());
+  assert.doesNotMatch(calls, /\.ssh|%2eenv|\.env|id_rsa/);
+  assert.match(calls, /the user closed the tab/);
+  assert.match(calls, /"level":"info"/);
+  assert.match(s.stderr(), /DENIED request "notifications\/cancelled"/);
+
+  const warning = session(box, ["--mode", "warn"]);
+  try {
+    await warning.listTools();
+    const kept = await warning.request("logging/setLevel", { level: "debug", note: "file:///home/me/.ssh/id_rsa" });
+    assert.deepEqual(kept.result, { ok: true });
+  } finally {
+    await warning.close();
+  }
+  assert.match(warning.stderr(), /warn mode, not blocked/);
+});
+
 test("a resource subscription that names credentials never reaches the server", async () => {
   const box = sandbox([ECHO]);
   const s = session(box);
@@ -1839,6 +1889,73 @@ test("flow: a credential returned by one server and sent to another is reported"
   const logText = JSON.stringify(box.audit());
   assert.ok(!logText.includes(FAKE_TOKEN), "the audit log never stores the credential itself");
   assert.match(logText, /\[credential removed\]/);
+});
+
+test("flow: a credential in a client message the firewall does not already check is reported", async () => {
+  const box = sandbox([ECHO, SEND]);
+  const vault = session(box, [], "vault");
+  try {
+    await vault.listTools();
+    await vault.call("echo", { echo: `your token is ${FAKE_TOKEN}` });
+    vault.send({
+      jsonrpc: "2.0",
+      method: "notifications/cancelled",
+      params: { requestId: "task-1", reason: FAKE_TOKEN },
+    });
+    await vault.call("send", { body: "ok" });
+  } finally {
+    await vault.close();
+  }
+  assert.doesNotMatch(vault.stderr(), /returned \d+ minute/);
+
+  const web = session(box, [], "web");
+  try {
+    await web.listTools();
+    web.send({
+      jsonrpc: "2.0",
+      method: "notifications/cancelled",
+      params: { requestId: "task-2", reason: `stop ${FAKE_TOKEN}` },
+    });
+    const res = await web.call("send", { body: "ok" });
+    assert.equal(res.result.isError, false, "by default a flow is reported, not blocked");
+  } finally {
+    await web.close();
+  }
+  assert.match(
+    web.stderr(),
+    /WARNING request to "notifications\/cancelled" on "web" carries a credential that server "vault" returned/,
+  );
+  assert.equal(JSON.stringify(box.audit()).includes(FAKE_TOKEN), false);
+  assert.ok(JSON.stringify(box.serverCalls()).includes(FAKE_TOKEN), "by default the message is still delivered");
+
+  const before = box.serverCalls().filter((call) => JSON.stringify(call).includes(FAKE_TOKEN)).length;
+  const policyFile = join(box.dir, "policy.json");
+  writeFileSync(
+    policyFile,
+    JSON.stringify({ flows: [{ id: "vault-stays-put", from: "vault", to: "*", action: "deny" }] }),
+  );
+  const gated = session(box, ["--policy", policyFile], "web");
+  try {
+    await gated.listTools();
+    gated.send({
+      jsonrpc: "2.0",
+      method: "notifications/cancelled",
+      params: { requestId: "task-3", reason: FAKE_TOKEN },
+    });
+    const denied = await gated.request("logging/setLevel", { level: "debug", note: FAKE_TOKEN });
+    assert.equal(denied.error.code, -32000);
+    assert.match(denied.error.message, /Blocked by toolwarden/);
+    assert.doesNotMatch(JSON.stringify(denied), new RegExp(FAKE_TOKEN));
+    await gated.call("send", { body: "ok" });
+  } finally {
+    await gated.close();
+  }
+  assert.equal(
+    box.serverCalls().filter((call) => JSON.stringify(call).includes(FAKE_TOKEN)).length,
+    before,
+    "a denied message never reaches the server",
+  );
+  assert.match(gated.stderr(), /DENIED request to "logging\/setLevel"/);
 });
 
 test("flow: a credential in a resource subscription is reported when another server is asked to watch it", async () => {
