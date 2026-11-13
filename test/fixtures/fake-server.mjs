@@ -197,6 +197,14 @@ function handle(msg) {
     });
   } else if (msg.method === "tools/call") {
     if (callsFile) appendFileSync(callsFile, JSON.stringify(envelope(msg.params, msg)) + "\n");
+    if (msg.params?.arguments && "rawResult" in msg.params.arguments) {
+      send({ jsonrpc: "2.0", id: msg.id, result: msg.params.arguments.rawResult });
+      return;
+    }
+    if (msg.params?.arguments && "rawError" in msg.params.arguments) {
+      send({ jsonrpc: "2.0", id: msg.id, error: msg.params.arguments.rawError });
+      return;
+    }
     if (typeof msg.params?.arguments?.fail === "string") {
       const error = { code: -32000, message: msg.params.arguments.fail };
       if (msg.params.arguments.failData && typeof msg.params.arguments.failData === "object") {
