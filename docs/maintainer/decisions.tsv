@@ -57,3 +57,7 @@ ts	phase	decision	why	evidence	result
 2026-11-13T01:20:43Z	red	an encoded token was written to the argument summary unchanged	redaction matched the raw text, so ghp_%61... stayed in the log and decoded back to the token	node script on summarizeArgs	the logged body still contained ghp_%61
 2026-11-13T01:20:43Z	green	an encoded credential is replaced in the log, a plain credential still is, and notes%20copy.md is kept	the log stores the redacted text, not a decodable copy	npm test	48 pass, 0 fail
 2026-11-13T01:20:43Z	review	comment review found no new comments to remove	the diff is the redaction and the test	comment review on the diff	0 deletions
+2026-11-13T01:26:47Z	merge	merged encoded-secret redaction after 5 CI checks passed	a token hidden by one percent-encoding is removed from the audit log	https://github.com/sarthakdev143-lite/toolwarden/pull/14	merged 7dfc8bd
+2026-11-13T01:26:47Z	red	a tool call with the credential in _meta was forwarded	policy and flow looked only at arguments, so a field beside them was invisible	test/proxy.test.mjs	failed as expected, the call was not an error
+2026-11-13T01:26:47Z	green	a credential in _meta or in a sibling field is denied, and a progress token is still allowed	the same fields are checked for cross-server flow, and the tool name is not searched as text	npm test	50 pass, 0 fail
+2026-11-13T01:26:47Z	review	comment review removed the note on why the tool name is excluded	the function name is fieldsBesideToolName	comment review on the diff	1 comment removed
