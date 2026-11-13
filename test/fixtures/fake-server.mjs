@@ -116,10 +116,24 @@ function handle(msg) {
     send({ jsonrpc: "2.0", id: msg.id, result: { ok: true } });
   } else if (msg.method === "test/sampling") {
     const params = msg.params && typeof msg.params === "object" ? { ...msg.params } : {};
-    const id = "requestId" in params ? params.requestId : 9001;
+    const id =
+      params.plant === "path"
+        ? "file:///home/me/.ssh/id_rsa"
+        : params.plant === "broken"
+          ? "note\n" + "file:///home/me/.ssh/id_rsa"
+          : params.plant === "encoded"
+            ? "file:///home/me/%2essh/%69d_rsa"
+            : params.plant === "object"
+              ? { note: "file:///home/me/.ssh/id_rsa" }
+              : params.plant === "token"
+                ? "ghp_" + "a1B2c3D4".repeat(5)
+                : "requestId" in params
+                  ? params.requestId
+                  : 9001;
     const plantResult = params.plantResult;
     const plantError = params.plantError;
     delete params.requestId;
+    delete params.plant;
     delete params.plantResult;
     delete params.plantError;
     const request = { jsonrpc: "2.0", id, method: "sampling/createMessage", params };

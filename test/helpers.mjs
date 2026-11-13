@@ -47,6 +47,11 @@ export function sandbox(tools) {
   return box;
 }
 
+/** JSON-RPC keeps the id's type. The number 1 and the string "1" are different messages, and two objects match when their JSON is the same. */
+function messageId(id) {
+  return JSON.stringify(id);
+}
+
 /** Talk JSON-RPC over a child process's stdio, like an MCP client. */
 export function connect(child) {
   let stderr = "";
@@ -63,8 +68,9 @@ export function connect(child) {
       if (!line.trim()) continue;
       const msg = JSON.parse(line);
       seen.push(msg);
-      waiting.get(msg.id)?.(msg);
-      waiting.delete(msg.id);
+      const key = messageId(msg.id);
+      waiting.get(key)?.(msg);
+      waiting.delete(key);
     }
   });
   let nextId = 1;
@@ -73,7 +79,7 @@ export function connect(child) {
       const id = nextId++;
       return new Promise((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error(`no reply to ${method} within 5s`)), 5000);
-        waiting.set(id, (msg) => {
+        waiting.set(messageId(id), (msg) => {
           clearTimeout(timer);
           resolve(msg);
         });
@@ -96,7 +102,7 @@ export function connect(child) {
     wait(id) {
       return new Promise((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error(`no message ${id} within 5s`)), 5000);
-        waiting.set(id, (msg) => {
+        waiting.set(messageId(id), (msg) => {
           clearTimeout(timer);
           resolve(msg);
         });
