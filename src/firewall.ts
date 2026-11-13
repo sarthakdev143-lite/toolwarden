@@ -1591,14 +1591,15 @@ export class Firewall {
     }
     if (Object.keys(side).length === 0) return decided;
     this.opts.flow?.record(side);
+    const noun =
+      itemKey === "tools" ? "tool list" : itemKey === "resources" ? "resource list" : itemKey === "prompts" ? "prompt list" : "template list";
+    this.warnLooseDefinition(side, "field beside the " + noun);
     if (this.resultMode === "off") return decided;
     const findings = scanResult(side);
     if (findings.length === 0) return decided;
     const reasons = findings.map((f) => f.message).join("; ");
     const checks = findings.map((f) => f.id);
     const { server, audit } = this.opts;
-    const noun =
-      itemKey === "tools" ? "tool list" : itemKey === "resources" ? "resource list" : itemKey === "prompts" ? "prompt list" : "template list";
     const withhold = this.resultMode === "block" && this.opts.mode === "block";
     const text = withhold
       ? `Blocked by toolwarden: a field beside this ${noun} was withheld because it ${reasons}.`
@@ -1629,7 +1630,7 @@ export class Firewall {
     return { ...base, result: nextResult };
   }
 
-  /** A list item or a definition reply that is not an object is still part of what the model reads. A credential path there is still shown otherwise. */
+  /** A list item, a definition reply, or a field beside a list is still part of what the model reads. A credential path there is still shown otherwise. */
   private warnLooseDefinition(item: unknown, label: string): void {
     const shown = scanResult(item);
     const findings = scanTool(item).filter((finding) => !shown.some((have) => have.id === finding.id));

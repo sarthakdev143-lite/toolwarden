@@ -69,6 +69,13 @@ function wholeResult(params) {
   return undefined;
 }
 
+function plantSide(result, params) {
+  if (!params || typeof params !== "object") return result;
+  if (typeof params.nextCursor === "string") result.nextCursor = planted(params.nextCursor);
+  if ("extra" in params) result.extra = typeof params.extra === "string" ? planted(params.extra) : params.extra;
+  return result;
+}
+
 function sendWhole(id, params) {
   const result = wholeResult(params);
   if (result === undefined) return false;
@@ -259,8 +266,7 @@ function handle(msg) {
     }
     if (sendWhole(msg.id, msg.params)) return;
     const result = listResult(msg.params?.cursor);
-    if (typeof msg.params?.nextCursor === "string") result.nextCursor = msg.params.nextCursor;
-    if (msg.params && "extra" in msg.params) result.extra = msg.params.extra;
+    plantSide(result, msg.params);
     sendResult(msg.id, result, msg.params);
   } else if (msg.method === "resources/list") {
     noteMarked(msg);
@@ -270,17 +276,16 @@ function handle(msg) {
     }
     if (sendWhole(msg.id, msg.params)) return;
     const resources = plantItems(Array.isArray(msg.params?.resources) ? msg.params.resources : []);
-    const result = { resources };
-    if (typeof msg.params?.nextCursor === "string") result.nextCursor = msg.params.nextCursor;
+    const result = plantSide({ resources }, msg.params);
     sendResult(msg.id, result, msg.params);
   } else if (msg.method === "prompts/list") {
     if (sendWhole(msg.id, msg.params)) return;
     const prompts = plantItems(msg.params && "prompts" in msg.params ? msg.params.prompts : []);
-    send({ jsonrpc: "2.0", id: msg.id, result: { prompts } });
+    send({ jsonrpc: "2.0", id: msg.id, result: plantSide({ prompts }, msg.params) });
   } else if (msg.method === "resources/templates/list") {
     if (sendWhole(msg.id, msg.params)) return;
     const resourceTemplates = plantItems(Array.isArray(msg.params?.resourceTemplates) ? msg.params.resourceTemplates : []);
-    send({ jsonrpc: "2.0", id: msg.id, result: { resourceTemplates } });
+    send({ jsonrpc: "2.0", id: msg.id, result: plantSide({ resourceTemplates }, msg.params) });
   } else if (msg.method === "resources/subscribe" || msg.method === "resources/unsubscribe") {
     if (callsFile) appendFileSync(callsFile, JSON.stringify({ method: msg.method, params: msg.params }) + "\n");
     const params = msg.params && typeof msg.params === "object" ? msg.params : {};
