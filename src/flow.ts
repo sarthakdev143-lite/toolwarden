@@ -13,7 +13,7 @@ import { collectText, matchForms } from "./scan.js";
  * suggestion, a completion error, a cancellation, a resource update, any
  * other notification, any other server request, a request for filesystem
  * roots, the reply to any other client request, the reply to a resource
- * subscription, or a field beside a server message, or an object key, or returns text, we remember
+ * subscription, or a field beside a server message, or parameters that are an array or a string, or an object key, or returns text, we remember
  * fingerprints (hashes, never the values) of the distinctive tokens in it. A token
  * written with a compatibility character or an invisible character is the same
  * token. When
