@@ -91,9 +91,10 @@ const CHECKS: Check[] = [
   },
 ];
 
-/** One layer of base64, including the URL-safe alphabet and omitted padding, when the bytes are UTF-8 text; null for anything else. */
+/** One layer of base64, including the URL-safe alphabet, omitted padding, and base64 written with a compatibility character or an invisible character, when the bytes are UTF-8 text; null for anything else. */
 export function decodedBlob(value: string): string | null {
-  let compact = value.replace(/\s+/g, "").replace(/-/g, "+").replace(/_/g, "/");
+  const folded = hasNonAscii(value) ? comparableText(value) : value;
+  let compact = folded.replace(/\s+/g, "").replace(/-/g, "+").replace(/_/g, "/");
   if (compact.length < 8) return null;
   if (!compact.includes("=")) {
     const rest = compact.length % 4;
@@ -114,7 +115,7 @@ function encodedText(key: string, value: unknown): string | null {
   return decodedBlob(value);
 }
 
-/** Includes text stored in a base64 blob (URL-safe or with the padding left off), in image and audio data, and in object keys. */
+/** Includes text stored in a base64 blob (URL-safe, unpadded, or written with a compatibility or invisible character), in image and audio data, and in object keys. */
 export function collectText(value: unknown): string[] {
   const out: string[] = [];
   collectStrings(value, out);
