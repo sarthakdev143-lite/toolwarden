@@ -353,6 +353,8 @@ export class Firewall {
         }
         if (this.rootsIdsAwaitingAnswer.has(id)) {
           this.rootsIdsAwaitingAnswer.delete(id);
+          const paired = this.pairedError(msg, "roots", "roots/list");
+          if (paired) return paired;
           if ("result" in msg) {
             const loose = this.looseRoots(msg);
             if (loose) return loose;
@@ -364,6 +366,8 @@ export class Firewall {
           }
         }
         if (this.elicitationIdsAwaitingAnswer.delete(id)) {
+          const paired = this.pairedError(msg, "elicitation", "elicitation/create");
+          if (paired) return paired;
           const body = "result" in msg ? msg.result : "error" in msg ? msg.error : undefined;
           if (body !== undefined) {
             const denied = this.policyDecision(msg, "elicitation", "other", body, "elicitation/create");
@@ -373,6 +377,8 @@ export class Firewall {
           }
         }
         if (this.samplingIdsAwaitingAnswer.delete(id)) {
+          const paired = this.pairedError(msg, "sampling", "sampling/createMessage");
+          if (paired) return paired;
           const body = "result" in msg ? msg.result : "error" in msg ? msg.error : undefined;
           if (body !== undefined) {
             const denied = this.policyDecision(msg, "sampling", "other", body, "sampling/createMessage");
@@ -383,6 +389,8 @@ export class Firewall {
         }
         if (asked !== undefined) {
           this.unknownRequestsAwaitingAnswer.delete(id);
+          const paired = this.pairedError(msg, asked, asked);
+          if (paired) return paired;
           const body = "result" in msg ? msg.result : "error" in msg ? msg.error : undefined;
           if (body !== undefined) {
             const denied = this.policyDecision(msg, asked, "other", body, asked);
@@ -783,6 +791,14 @@ export class Firewall {
       id: request.id,
       result: { content: [{ type: "text", text }], isError: true },
     };
+  }
+
+  /** An error beside a result is still part of the answer. A credential path there still reaches the server otherwise. */
+  private pairedError(msg: Json, label: string, toolName: string): ClientDecision | null {
+    if (!("result" in msg) || !("error" in msg)) return null;
+    const denied = this.policyDecision(msg, label, "other", msg.error, toolName);
+    if (denied) return denied;
+    return this.flowDecision(msg, label, "answer", msg.error);
   }
 
   /** An error answering a filesystem-root request is still an answer. A credential path there still reaches the server otherwise. */
