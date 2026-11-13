@@ -1047,9 +1047,10 @@ export class Firewall {
     return decided;
   }
 
-  /** A value that is not a JSON-RPC object is still part of what the server sent. An instruction there is still shown otherwise, and a credential there is still forgotten otherwise. */
+  /** A value that is not a JSON-RPC object is still part of what the server sent. An instruction there is still shown otherwise, and a credential there is still forgotten otherwise. A credential path there is still shown otherwise. */
   private foldBare(value: unknown): unknown {
     this.opts.flow?.record(value);
+    this.warnLooseDefinition(value, "server value");
     if (this.resultMode === "off") return null;
     const findings = scanResult(value);
     if (findings.length === 0) return null;
@@ -1632,7 +1633,7 @@ export class Firewall {
     return { ...base, result: nextResult };
   }
 
-  /** A list item, a definition reply, a field beside a list, a sampling system prompt, the method on a server message, or the protocol version is still part of what the model reads. A credential path there is still shown otherwise. */
+  /** A list item, a definition reply, a field beside a list, a sampling system prompt, the method on a server message, the protocol version, or a value that is not a JSON-RPC object is still part of what the model reads. A credential path there is still shown otherwise. */
   private warnLooseDefinition(item: unknown, label: string): void {
     const shown = scanResult(item);
     const findings = scanTool(item).filter((finding) => !shown.some((have) => have.id === finding.id));
