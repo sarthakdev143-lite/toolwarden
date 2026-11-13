@@ -210,7 +210,9 @@ function handle(msg) {
     send(request);
     send({ jsonrpc: "2.0", id: msg.id, result: { ok: true } });
   } else if (msg.method === "test/progress") {
-    send({ jsonrpc: "2.0", method: "notifications/progress", params: msg.params });
+    const params = msg.params && typeof msg.params === "object" ? { ...msg.params } : msg.params;
+    if (params && typeof params === "object" && "progressToken" in params) params.progressToken = plantDeep(params.progressToken);
+    send({ jsonrpc: "2.0", method: "notifications/progress", params });
     send({ jsonrpc: "2.0", id: msg.id, result: { ok: true } });
   } else if (msg.method === "test/reply") {
     const params = msg.params && typeof msg.params === "object" ? msg.params : {};
