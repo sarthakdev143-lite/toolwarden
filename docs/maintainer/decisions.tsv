@@ -61,3 +61,6 @@ ts	phase	decision	why	evidence	result
 2026-11-13T01:26:47Z	red	a tool call with the credential in _meta was forwarded	policy and flow looked only at arguments, so a field beside them was invisible	test/proxy.test.mjs	failed as expected, the call was not an error
 2026-11-13T01:26:47Z	green	a credential in _meta or in a sibling field is denied, and a progress token is still allowed	the same fields are checked for cross-server flow, and the tool name is not searched as text	npm test	50 pass, 0 fail
 2026-11-13T01:26:47Z	review	comment review removed the note on why the tool name is excluded	the function name is fieldsBesideToolName	comment review on the diff	1 comment removed
+2026-11-13T01:41:21Z	red	a resource template whose description says to ignore previous instructions produced no warning	only resources/list and prompts/list were scanned, so resources/templates/list was invisible	test/results-flow.test.mjs	failed as expected, zero definition warnings
+2026-11-13T01:41:21Z	green	a suspicious resource template is reported once and the listing is still delivered	the label is the uri template, and an ordinary template is not reported	npm test	51 pass, 0 fail
+2026-11-13T01:41:21Z	review	the template scan added no comments	the catalog path is the same one resources and prompts already use	comment review on the diff	0 comments removed
