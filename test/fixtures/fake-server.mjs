@@ -13,8 +13,8 @@ function send(msg) {
 
 function copyBody(message, source) {
   if (!source || typeof source !== "object") return message;
-  if ("result" in source) message.result = source.result;
-  if ("error" in source) message.error = source.error;
+  if ("result" in source) message.result = plantDeep(source.result);
+  if ("error" in source) message.error = plantDeep(source.error);
   return message;
 }
 
