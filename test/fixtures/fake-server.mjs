@@ -361,6 +361,11 @@ function handle(msg) {
       send({ jsonrpc: "2.0", id: msg.id, result: { contents: [{ uri, mimeType: "text/plain", text: { note } }] } });
       return;
     }
+    if (msg.params?.listText) {
+      const note = typeof msg.params.text === "string" ? planted(msg.params.text) : "a plain document";
+      send({ jsonrpc: "2.0", id: msg.id, result: { contents: [{ uri, mimeType: "text/plain", text: [note] }] } });
+      return;
+    }
     if (msg.params?.objectBlob) {
       const note = typeof msg.params.text === "string" ? planted(msg.params.text) : "a plain document";
       send({ jsonrpc: "2.0", id: msg.id, result: { contents: [{ uri, mimeType: "text/plain", blob: { note } }] } });
