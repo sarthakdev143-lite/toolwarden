@@ -572,11 +572,12 @@ export class Firewall {
     if (completion !== undefined) {
       this.pendingCompletions.delete(key);
       if (isObject(msg.result)) return this.checkCompletion(msg, msg.result, completion);
+      if (isObject(msg.error)) return this.checkFailure(msg, msg.error, completion, "completion");
     }
     return null;
   }
 
-  private checkFailure(msg: Json, error: Json, label: string, kind: "tool" | "resource" | "prompt"): Json | null {
+  private checkFailure(msg: Json, error: Json, label: string, kind: "tool" | "resource" | "prompt" | "completion"): Json | null {
     const { server, audit } = this.opts;
     this.opts.flow?.record(error);
     if (this.resultMode === "off") return null;
