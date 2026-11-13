@@ -81,6 +81,26 @@ export const DEFAULT_RULES: Rule[] = [
     pattern: PATH_EDGE + "\\.vault-token($|[^\\w.-])",
     message: "references a Vault token",
   },
+  {
+    id: "database-passwords",
+    pattern: PATH_EDGE + "\\.(pgpass|mylogin\\.cnf|my\\.cnf)($|[^\\w.-])",
+    message: "references a database password file",
+  },
+  {
+    id: "terraform-credentials",
+    pattern: PATH_EDGE + "\\.terraformrc($|[^\\w.-])|\\.terraform\\.d($|[^\\w.-])|" + PATH_EDGE + "credentials\\.tfrc\\.json($|[^\\w.-])",
+    message: "references Terraform credentials",
+  },
+  {
+    id: "kube-serviceaccount",
+    pattern: "secrets[\\\\/]kubernetes\\.io[\\\\/]serviceaccount($|[^\\w.-])",
+    message: "references a Kubernetes service account token",
+  },
+  {
+    id: "rclone-credentials",
+    pattern: PATH_EDGE + "\\.config[\\\\/]rclone($|[^\\w.-])|" + PATH_EDGE + "rclone\\.conf($|[^\\w.-])",
+    message: "references rclone credentials",
+  },
 ];
 
 interface CompiledRule {

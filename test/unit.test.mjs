@@ -89,6 +89,28 @@ test("default policy catches credential paths in nested arguments", () => {
   assert.equal(policy.evaluate("run", { file: "/home/me/.vault-token" }).denied?.ruleId, "vault-token");
   assert.equal(policy.evaluate("run", { file: "vault-token" }).denied, null);
   assert.equal(policy.evaluate("read", { uri: "file:///home/me/%2edocker/config.json" }).denied?.ruleId, "docker-credentials");
+  assert.equal(policy.evaluate("run", { cmd: "cat ~/.pgpass" }).denied?.ruleId, "database-passwords");
+  assert.equal(policy.evaluate("run", { cmd: "cat .pgpass" }).denied?.ruleId, "database-passwords");
+  assert.equal(policy.evaluate("run", { file: "/home/me/.mylogin.cnf" }).denied?.ruleId, "database-passwords");
+  assert.equal(policy.evaluate("run", { file: "/home/me/.my.cnf" }).denied?.ruleId, "database-passwords");
+  assert.equal(policy.evaluate("read", { uri: "file:///home/me/%2epgpass" }).denied?.ruleId, "database-passwords");
+  assert.equal(policy.evaluate("run", { file: "notes.pgpass" }).denied, null);
+  assert.equal(policy.evaluate("run", { file: "pgpass" }).denied, null);
+  assert.equal(policy.evaluate("run", { q: "search?q=.pgpass" }).denied, null);
+  assert.equal(policy.evaluate("run", { file: "notmy.cnf" }).denied, null);
+  assert.equal(policy.evaluate("run", { file: "/home/me/.terraform.d/credentials.tfrc.json" }).denied?.ruleId, "terraform-credentials");
+  assert.equal(policy.evaluate("run", { cmd: "cat .terraformrc" }).denied?.ruleId, "terraform-credentials");
+  assert.equal(policy.evaluate("run", { file: "C:\\Users\\me\\AppData\\Roaming\\terraform.d\\credentials.tfrc.json" }).denied?.ruleId, "terraform-credentials");
+  assert.equal(policy.evaluate("run", { file: "/app/.terraform/providers" }).denied, null);
+  assert.equal(policy.evaluate("run", { file: ".terraformrc.bak" }).denied, null);
+  assert.equal(policy.evaluate("run", { file: "/var/run/secrets/kubernetes.io/serviceaccount/token" }).denied?.ruleId, "kube-serviceaccount");
+  assert.equal(policy.evaluate("run", { file: "C:\\var\\run\\secrets\\kubernetes.io\\serviceaccount\\token" }).denied?.ruleId, "kube-serviceaccount");
+  assert.equal(policy.evaluate("run", { file: "docs/kubernetes.io/overview" }).denied, null);
+  assert.equal(policy.evaluate("run", { file: "/home/me/.config/rclone/rclone.conf" }).denied?.ruleId, "rclone-credentials");
+  assert.equal(policy.evaluate("run", { cmd: "tar cf - .config/rclone" }).denied?.ruleId, "rclone-credentials");
+  assert.equal(policy.evaluate("run", { file: "C:\\Users\\me\\AppData\\Roaming\\rclone\\rclone.conf" }).denied?.ruleId, "rclone-credentials");
+  assert.equal(policy.evaluate("run", { file: "/home/me/.config/rclone-backup" }).denied, null);
+  assert.equal(policy.evaluate("run", { file: "notrclone.conf" }).denied, null);
 });
 
 test("warn rules do not deny", () => {
