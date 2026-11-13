@@ -67,9 +67,14 @@ function catalogLabel(item: Json, kind: CatalogKind): string {
 }
 
 function annotateIntro(result: Json, text: string): Json {
+  const next: Json = { ...result };
+  for (const [key, value] of Object.entries(result)) {
+    if (key === "instructions") continue;
+    next[key] = prefixSuspicious(value, text);
+  }
   const current = result.instructions;
-  const instructions = typeof current === "string" && current !== "" ? text + "\n\n" + current : text;
-  return { ...result, instructions };
+  next.instructions = typeof current === "string" && current !== "" ? text + "\n\n" + current : text;
+  return next;
 }
 
 function prefixSuspicious(value: unknown, notice: string): unknown {
