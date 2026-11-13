@@ -11,6 +11,13 @@ function send(msg) {
   process.stdout.write(JSON.stringify(msg) + "\n");
 }
 
+function attachNote(message, source) {
+  if (!source || typeof source !== "object") return message;
+  if (source.plant === "token") message.note = "your token is " + ("ghp_" + "a1B2c3D4".repeat(5));
+  else if ("note" in source) message.note = source.note;
+  return message;
+}
+
 function envelope(base, msg) {
   const seen = { ...base };
   for (const [key, value] of Object.entries(msg)) {
@@ -99,6 +106,7 @@ function handle(msg) {
     const params = msg.params && typeof msg.params === "object" ? msg.params : {};
     const note = { jsonrpc: "2.0", method: params.method };
     if ("params" in params) note.params = params.params;
+    attachNote(note, params);
     send(note);
     send({ jsonrpc: "2.0", id: msg.id, result: { ok: true } });
   } else if (msg.method === "test/updated") {
@@ -191,7 +199,7 @@ function handle(msg) {
       if (msg.params.arguments.failData && typeof msg.params.arguments.failData === "object") {
         error.data = msg.params.arguments.failData;
       }
-      send({ jsonrpc: "2.0", id: msg.id, error });
+      send(attachNote({ jsonrpc: "2.0", id: msg.id, error }, msg.params.arguments));
       return;
     }
     if (typeof msg.params?.arguments?.image === "string" || typeof msg.params?.arguments?.audio === "string") {
@@ -230,7 +238,7 @@ function handle(msg) {
     if (msg.params?.arguments?.structured && typeof msg.params.arguments.structured === "object") {
       result.structuredContent = msg.params.arguments.structured;
     }
-    send({ jsonrpc: "2.0", id: msg.id, result });
+    send(attachNote({ jsonrpc: "2.0", id: msg.id, result }, msg.params?.arguments));
   } else if (msg.method === undefined && msg.id !== undefined && (msg.result !== undefined || msg.error !== undefined)) {
     if (callsFile) appendFileSync(callsFile, JSON.stringify(msg) + "\n");
   } else if (msg.id !== undefined) {

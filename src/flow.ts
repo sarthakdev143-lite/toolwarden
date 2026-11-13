@@ -13,8 +13,8 @@ import { collectText } from "./scan.js";
  * shows a tool definition, a catalog description, an introduction, a completion
  * suggestion, a completion error, a cancellation, a resource update, any
  * other notification, any other server request, a request for filesystem
- * roots, the reply to any other client request, or the reply to a resource
- * subscription, or returns text, we remember
+ * roots, the reply to any other client request, the reply to a resource
+ * subscription, or a field beside a server message, or returns text, we remember
  * fingerprints (hashes, never the values) of the distinctive tokens in it. When
  * a call to a *different* server carries one of those tokens in its arguments,
  * in a filesystem root, in any other client message, in a field beside the
