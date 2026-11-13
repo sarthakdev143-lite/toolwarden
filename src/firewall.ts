@@ -305,6 +305,26 @@ function fieldsBesideToolContent(content: unknown): Json[] | null {
   return kept.length > 0 ? kept : null;
 }
 
+/** The uri on a returned resource says which resource the text came from, including when the resource is not a list and when the result itself is that list. A credential path there is still shown otherwise. A field beside that resource, other than the document text, is still part of what the model reads. A credential path there is still shown otherwise. */
+function returnedResource(contents: unknown): { uris: unknown[]; items: Json[] } | null {
+  const list = Array.isArray(contents) ? contents : isObject(contents) ? [contents] : null;
+  if (list === null) return null;
+  const uris: unknown[] = [];
+  const items: Json[] = [];
+  for (const item of list) {
+    if (!isObject(item)) continue;
+    if ("uri" in item) uris.push(item.uri);
+    const itemSide: Json = {};
+    for (const [key, value] of Object.entries(item)) {
+      if (key === "uri" || key === "text" || key === "blob") continue;
+      itemSide[key] = value;
+    }
+    if (Object.keys(itemSide).length > 0) items.push(itemSide);
+  }
+  if (uris.length === 0 && items.length === 0) return null;
+  return { uris, items };
+}
+
 /** The result of inspecting a message from the client (the AI app). */
 export interface ClientDecision {
   /** Pass the message on to the server. */
@@ -1468,6 +1488,14 @@ export class Firewall {
         const beside = fieldsBesideToolContent(msg.result);
         if (beside !== null) this.warnLooseDefinition({ content: beside }, "field beside the tool");
       }
+      // The uri on a returned resource says which resource the text came from when the result itself is that list. A credential path there is still shown otherwise. A field beside that resource, other than the document text, is still part of what the model reads. A credential path there is still shown otherwise.
+      if (pending.kind === "resource" && "result" in msg && !isObject(msg.result)) {
+        const found = returnedResource(msg.result);
+        if (found !== null) {
+          if (found.uris.length > 0) this.warnLooseDefinition(found.uris, "resource uri");
+          if (found.items.length > 0) this.warnLooseDefinition({ contents: found.items }, "field beside the resource");
+        }
+      }
       // A prompt result that is not an object is still text the model follows. A credential path there is still shown otherwise.
       if (pending.kind === "prompt" && "result" in msg && !isObject(msg.result)) this.warnLooseDefinition(msg.result, "prompt result");
       if (isObject(msg.error)) return this.checkFailure(msg, msg.error, pending.label, pending.kind);
@@ -1688,7 +1716,7 @@ export class Firewall {
     return { ...base, result: nextResult };
   }
 
-  /** A list item, a definition reply, a field beside a list, a sampling system prompt, a sampling message, any other field on a sampling request, the method on a server message, the protocol version, a value that is not a JSON-RPC object, the id of a server message, a field beside a server message, parameters that are not an object, a result or an error on a server request or notification, a progress token, an elicitation question, a resource update, any other server notice, a cancellation id, a prompt result, including one that is not an object, the uri of a returned resource, including one that is not a list, a field beside that resource, or a field beside tool output, including when that output is not a list and when the result itself is that list, or a field beside an embedded resource, including when that resource is a list, is still part of what the model reads. A credential path there is still shown otherwise. */
+  /** A list item, a definition reply, a field beside a list, a sampling system prompt, a sampling message, any other field on a sampling request, the method on a server message, the protocol version, a value that is not a JSON-RPC object, the id of a server message, a field beside a server message, parameters that are not an object, a result or an error on a server request or notification, a progress token, an elicitation question, a resource update, any other server notice, a cancellation id, a prompt result, including one that is not an object, the uri of a returned resource, including one that is not a list and when the result itself is that list, a field beside that resource, or a field beside tool output, including when that output is not a list and when the result itself is that list, or a field beside an embedded resource, including when that resource is a list, is still part of what the model reads. A credential path there is still shown otherwise. */
   private warnLooseDefinition(item: unknown, label: string): void {
     const shown = scanResult(item);
     const findings = scanTool(item).filter((finding) => !shown.some((have) => have.id === finding.id));
@@ -2097,7 +2125,7 @@ export class Firewall {
     return { ...msg, params: nextParams };
   }
 
-  /** A prompt result is text the model follows. An instruction there is still shown otherwise. A credential path there is still shown otherwise. The uri on a returned resource says which resource the text came from, including when the resource is not a list. A credential path there is still shown otherwise. A field beside that resource, other than the document text, is still part of what the model reads. A credential path there is still shown otherwise. A field beside tool output, other than the content the tool returned, is still part of what the model reads, including when that output is not a list and when the result itself is that list. A credential path there is still shown otherwise. A field beside an embedded resource, other than its document, is still part of what the model reads, including when that resource is a list. A credential path there is still shown otherwise. */
+  /** A prompt result is text the model follows. An instruction there is still shown otherwise. A credential path there is still shown otherwise. The uri on a returned resource says which resource the text came from, including when the resource is not a list and when the result itself is that list. A credential path there is still shown otherwise. A field beside that resource, other than the document text, is still part of what the model reads. A credential path there is still shown otherwise. A field beside tool output, other than the content the tool returned, is still part of what the model reads, including when that output is not a list and when the result itself is that list. A credential path there is still shown otherwise. A field beside an embedded resource, other than its document, is still part of what the model reads, including when that resource is a list. A credential path there is still shown otherwise. */
   private checkResult(msg: Json, result: Json, label: string, kind: "tool" | "resource" | "prompt"): Json | null {
     const { server, audit } = this.opts;
     this.opts.flow?.record(result);
@@ -2116,22 +2144,10 @@ export class Firewall {
       for (const [key, value] of Object.entries(result)) {
         if (key !== "contents") side[key] = value;
       }
-      const contents = Array.isArray(result.contents) ? result.contents : isObject(result.contents) ? [result.contents] : null;
-      if (contents !== null) {
-        const uris: unknown[] = [];
-        const items: Json[] = [];
-        for (const item of contents) {
-          if (!isObject(item)) continue;
-          if ("uri" in item) uris.push(item.uri);
-          const itemSide: Json = {};
-          for (const [key, value] of Object.entries(item)) {
-            if (key === "uri" || key === "text" || key === "blob") continue;
-            itemSide[key] = value;
-          }
-          if (Object.keys(itemSide).length > 0) items.push(itemSide);
-        }
-        if (uris.length > 0) this.warnLooseDefinition(uris, "resource uri");
-        if (items.length > 0) side.contents = items;
+      const found = returnedResource(result.contents);
+      if (found !== null) {
+        if (found.uris.length > 0) this.warnLooseDefinition(found.uris, "resource uri");
+        if (found.items.length > 0) side.contents = found.items;
       }
       if (Object.keys(side).length > 0) this.warnLooseDefinition(side, "field beside the resource");
     }
