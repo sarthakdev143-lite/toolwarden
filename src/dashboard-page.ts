@@ -250,7 +250,7 @@ details.server .body { padding: 0 16px 14px; }
           }).then(refresh).catch(function (err) { button.disabled = false; showError(err.message); });
         });
         actions.appendChild(button);
-        actions.appendChild(el("span", "meta", "Until you approve it, this tool stays hidden from the AI and blocked."));
+        actions.appendChild(el("span", "meta", "Until you approve it, this tool stays hidden from the AI and blocked. Restart the MCP client (or reconnect the server) for the change to take effect. A client that listed tools at connect time keeps a newly approved tool hidden until it reconnects."));
         card.appendChild(actions);
         root.appendChild(card);
       });

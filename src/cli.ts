@@ -42,6 +42,9 @@ Options for "run" and "http":
   --no-flow            Turn off tracking of data moving between servers
   --state <dir>        Where pins and logs live (default: ~/.toolwarden, or $TOOLWARDEN_HOME)
 
+Options for "status", "approve", "log", and "dashboard":
+  --state <dir>        Same directory as "run" and "http"
+
 Options for "http":
   --target <url>       The remote MCP server's URL
   --port <number>      Local port to listen on (default 8787)

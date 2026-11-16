@@ -32,7 +32,7 @@ These are documented in the README and the [threat model](docs/threat-model.md):
 
 - The first version of a tool is trusted
 - Pattern-based checks can be evaded by encoding or rewording
-- In the default mode, suspicious tool output is annotated, not withheld
+- In the default mode, suspicious text from a server is annotated, not withheld. That includes tool, resource, and prompt output and the other server messages
 
 Ideas for narrowing these limits are welcome as normal issues.
 

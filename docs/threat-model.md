@@ -13,7 +13,7 @@ directions.
 
 ## What we protect
 
-1. **The person's credentials and files**: SSH keys, cloud credentials, `.env` files, and token files such as Docker, GitHub CLI, GnuPG, Cargo, and Vault.
+1. **The person's credentials and files**: SSH keys, cloud credentials, `.env` files, and token files such as npm, pip, netrc, git credentials, Docker, the GitHub CLI, GnuPG, Cargo, Vault, database passwords, Terraform, a Kubernetes service account, and rclone.
 2. **The model's instructions**: what the model does should come from the person, not
    from text a server slipped in.
 3. **The person's ability to know what happened**: a record of every tool call.
@@ -62,10 +62,11 @@ page does not keep the first-use window open, and a call to a tool that was neve
 is blocked.
 
 **Pattern checks can be evaded.** One layer of percent-encoding is decoded before the
-checks, and one layer of base64, including URL-safe base64, base64 with the padding left off, and base64 written with a compatibility character or an invisible character, is decoded for a resource blob and for image and audio data. A determined attacker
-can encode another way, split or reword. The argument rules, result checks and flow
-tracking raise the cost of an attack and catch the common forms; they are not a proof
-of safety.
+checks, and one layer of base64 is decoded too, including URL-safe and unpadded text,
+text written with a compatibility or invisible character, and text nested in a list or
+object. A determined attacker can encode another way, split or reword. The argument
+rules, result checks and flow tracking raise the cost of an attack and catch the common
+forms; they are not a proof of safety.
 
 **A server acts with whatever access it was given.** toolwarden governs what passes
 through the protocol. A local server that reads `~/.ssh` by itself, without being asked

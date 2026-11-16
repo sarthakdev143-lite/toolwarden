@@ -10,7 +10,7 @@ AI app  ⇄  toolwarden  ⇄  MCP server
 
 - **Blocks rug-pulls.** The first time you use a server, toolwarden records ("pins") every tool's definition. If a tool's description or inputs change later, the tool is hidden from the AI and calls to it are blocked until you review the change. A tool whose name is not a string cannot be pinned; its text is still checked for hidden instructions.
 - **Quarantines new tools.** A tool that appears after you first approved a server stays hidden until you approve it.
-- **Guards your credentials.** A message that references SSH keys, cloud credentials, `.env` files, or token files is denied before it reaches the server. That covers tool calls, resource reads and subscriptions, filesystem roots, prompt and completion arguments, the opening handshake, other client messages, answers to the server, and sampling replies. Token files include Docker, the GitHub CLI, GnuPG, Cargo, Vault, database passwords, Terraform, a Kubernetes service account, and rclone. A path written with a compatibility character or an invisible character is denied too. You can add your own rules.
+- **Guards your credentials.** A message that references SSH keys, cloud credentials, `.env` files, or token files is denied before it reaches the server. That covers tool calls, resource reads and subscriptions, filesystem roots, prompt and completion arguments, the opening handshake, other client messages, answers to the server, and sampling replies. Token files include npm, pip, netrc, and git credentials, plus Docker, the GitHub CLI, GnuPG, Cargo, Vault, database passwords, Terraform, a Kubernetes service account, and rclone. A path written with a compatibility character or an invisible character is denied too. You can add your own rules.
 - **Inspects what tools, resources and prompts return.** If text a server sends is aimed at the model ("ignore previous instructions", "do not tell the user"), toolwarden puts a notice in front of it telling the model to treat it as data. The text is still delivered, and you can withhold it instead. The check covers tool results and errors, structured output, resources (including one layer of base64 in a blob, image, or audio field, and text nested in a list or object), prompts, the server's introduction, sampling requests, questions, logs, progress updates, completions, cancellations, and other server messages. A progress token and a message id are reported and left unchanged so the exchange still matches. Text written with a compatibility character or an invisible character is checked too.
 - **Follows data between servers.** If a credential returned by one server shows up in a call to another, you are told. Tracking follows credentials in what a server returns or shows, including one layer of base64 and text written with a compatibility character or an invisible character, and it recognizes them in later calls, resource reads, and other client messages. You can write rules such as "nothing from the vault server may go to the web server".
 - **Works with local and remote servers.** Local (stdio) servers are wrapped; remote (HTTP) servers go through a local proxy.
@@ -55,7 +55,7 @@ Cursor  /home/me/.cursor/mcp.json
 Protect 1 server(s)? Each config file is backed up first. [y/N]
 ```
 
-It looks in the config files of Claude Desktop, Claude Code, Cursor, Windsurf, VS Code and Gemini CLI, plus `.mcp.json`, `.cursor/mcp.json` and `.vscode/mcp.json` in the current folder.
+It looks in the config files of Claude Desktop, Claude Code, Cursor, Windsurf, VS Code and Gemini CLI, plus `.mcp.json`, `.cursor/mcp.json` and `.vscode/mcp.json` in the current folder. A file that is not strict JSON, including one with comments, is skipped, and the command names that file.
 
 | Command | What it does |
 |---|---|
@@ -64,6 +64,7 @@ It looks in the config files of Claude Desktop, Claude Code, Cursor, Windsurf, V
 | `toolwarden init --undo` | Take toolwarden out of the config files again |
 | `toolwarden init --upgrade` | Rewrite already-protected servers after you update toolwarden |
 | `toolwarden init --config <file>` | Use a config file in an unusual place |
+| `toolwarden init --via <npx\|path>` | Choose how clients start toolwarden. `npx` pins this exact version. `path` runs this copy. The default is `npx` when installed from npm, and `path` from a source checkout. |
 
 The original file is kept next to it as `<file>.toolwarden-backup`.
 
@@ -127,6 +128,7 @@ or in the terminal:
 $ toolwarden status
 
 weather
+  command: npx -y weather-server
   approved tools (1): get_weather
   waiting for review (1):
 
@@ -139,7 +141,7 @@ $ toolwarden approve weather get_weather
 
 `toolwarden status` exits with code 1 while anything is waiting for review, so you can use it in scripts.
 
-The dashboard can approve changes, so it is locked down: it listens on `127.0.0.1` only, needs the access token in the link it prints, and refuses requests from other sites. Approving on the page pins the version you are looking at. If that tool changes again before you click, the click is refused and the new version stays hidden. `toolwarden approve` pins whatever is waiting at the moment you run it.
+The dashboard can approve changes, so it is locked down: it listens on `127.0.0.1` only, needs the access token in the link it prints, and refuses requests from other sites. Approving on the page pins the version you are looking at. If that tool changes again before you click, the click is refused and the new version stays hidden. `toolwarden approve` pins whatever is waiting at the moment you run it, then says to restart the MCP client (or reconnect the server) for the change to take effect. The dashboard says the same. A client that listed tools at connect time keeps a newly approved tool hidden until it reconnects.
 
 ## Commands
 
@@ -160,14 +162,14 @@ Options for `run` and `http`:
 | `--name <id>` | Name for this server. Set it, so the name stays the same if the command changes. |
 | `--mode block\|warn` | `block` (default) stops bad calls. `warn` only reports them, which is useful while trying it out. |
 | `--results <mode>` | What to do when text from a server looks like instructions: `annotate` (default) adds a notice for the model, `warn` only reports, `block` withholds the text, `off` skips the check. This covers tool, resource, and prompt output and the other server messages described above. A progress token and a message id stay unchanged so the exchange still matches. |
-| `--policy <file>` | Extra rules. Defaults to `~/.toolwarden/policy.json` if that file exists. |
+| `--policy <file>` | Extra rules. Defaults to `<state>/policy.json` if that file exists. |
 | `--no-default-rules` | Turn off the built-in credential rules. |
 | `--no-flow` | Turn off tracking of data moving between servers. |
-| `--state <dir>` | Where pins and the log live. Defaults to `~/.toolwarden` or `$TOOLWARDEN_HOME`. |
+| `--state <dir>` | Where pins and the log live. Defaults to `~/.toolwarden` or `$TOOLWARDEN_HOME`. `status`, `approve`, `log`, and `dashboard` use the same directory. |
 
 ## Writing your own rules
 
-Put a `policy.json` in `~/.toolwarden/`:
+Put a `policy.json` in the state directory (`~/.toolwarden/` unless you set `--state` or `$TOOLWARDEN_HOME`):
 
 ```json
 {
@@ -183,12 +185,12 @@ Put a `policy.json` in `~/.toolwarden/`:
 }
 ```
 
-**Argument rules** (`rules`): a regular expression tested against every string in a tool call, other than the tool name. That includes `arguments`, `_meta`, and any other field sent beside them. The same rules apply to a completion request.
+**Argument rules** (`rules`): a regular expression tested against every string in the message, other than a tool call's name. That includes arguments, object keys, and any other field sent beside them. The same rules apply to resource reads and subscriptions, filesystem roots, prompt and completion arguments, the opening handshake, other client messages, answers to the server, and sampling replies.
 
 - `tool` is a glob over the tool name (default `*`). A `*` matches any text, including a line break.
 - `action` is `deny` (default) or `warn`.
 
-**Flow rules** (`flows`): what to do when a value that one server returned, or showed in a tool definition, its introduction, or a resource, prompt, or template description, appears in a call to another server, including a completion request. The first matching rule wins.
+**Flow rules** (`flows`): what to do when a value that one server returned, or showed in a tool definition, its introduction, or a resource, prompt, or template description, appears in a message to another server. That includes a later tool call, a resource read or subscription, a prompt or completion argument, a filesystem root, and an answer to the server. The first matching rule wins.
 
 - `from` and `to` are globs over server names. A `*` matches any text, including a line break.
 - `kind` is `secret` (only credential-shaped values, such as API tokens and private keys) or `any` (default).
@@ -199,7 +201,7 @@ With no flow rules, a credential moving between servers is reported and other va
 ## How it works
 
 - **Pins** live in `~/.toolwarden/pins/<server>.json`: a SHA-256 hash of each tool definition, with keys sorted so reordering does not count as a change. The first listing may span pages. toolwarden keeps trusting that listing only while each request continues the cursor the server just returned, and for at most 32 pages. A different listing, or a page past that bound, is reviewed like any later change. A call to a tool that was never listed is blocked.
-- **The audit log** is `~/.toolwarden/audit.log`, one JSON object per line. Credential-shaped values in call arguments are removed before they are written, including a value hidden by one layer of percent-encoding or base64, including URL-safe base64, base64 with the padding left off, and base64 written with a compatibility character or an invisible character.
+- **The audit log** is `~/.toolwarden/audit.log`, one JSON object per line. Credential-shaped values in call arguments are removed before they are written, including an object key and one layer of percent-encoding or base64.
 - **Flow tracking** stores only hashes of the values a server returned or showed in a tool definition, its introduction, or a resource, prompt, or template description, for 30 minutes, in `~/.toolwarden/flow/`.
 - Files are created readable only by you.
 
@@ -208,8 +210,8 @@ With no flow rules, a credential moving between servers is reported and other va
 A security tool should be clear about its limits.
 
 - **The first version of a tool is trusted.** Pinning catches *changes*. If a server is malicious on day one, pinning will not stop it. The hidden-instruction checks help here, but they are heuristics, and they warn without blocking.
-- **The checks are pattern matching.** Argument rules, result checks and flow tracking stop the obvious cases. One layer of percent-encoding is decoded before those checks, because a server decodes a path before it opens it. One layer of base64 is decoded too, including URL-safe base64, base64 with the padding left off, and base64 written with a compatibility character or an invisible character, including when that text is nested in a list or an object. A credential path stored that way is denied. Values encoded another way, split up, reworded, or built by the server itself can still get past them. Flow tracking follows distinctive tokens (keys, IDs), not ordinary prose.
-- **A notice is advice to the model.** In the default `annotate` mode, suspicious output still reaches the model with a warning in front, including when that output is not a list and when that text is not a string. Use `--results block` to withhold it.
+- **The checks are pattern matching.** Argument rules, result checks and flow tracking stop the obvious cases. One layer of percent-encoding is decoded before those checks, because a server decodes a path before it opens it. One layer of base64 is decoded too, including URL-safe and unpadded text, text written with a compatibility or invisible character, and text nested in a list or an object. A credential path stored that way is denied. Values encoded another way, split up, reworded, or built by the server itself can still get past them. Flow tracking follows distinctive tokens (keys, IDs), not ordinary prose.
+- **A notice is advice to the model.** In the default `annotate` mode, suspicious text from a server still reaches the model with a warning in front. That includes tool, resource, and prompt output and the other server messages described above. Use `--results block` to withhold it.
 - **Remote servers that need a browser sign-in (OAuth)** are passed through, but the sign-in flow has not been tested through the proxy.
 - **Tested on Linux and macOS**, against the official filesystem and "everything" servers with the official MCP client. **Windows support is experimental.**
 
