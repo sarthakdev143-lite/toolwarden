@@ -17,6 +17,12 @@ test("help describes --results the same way as the install guide", () => {
   assert.match(help.stdout, /tool, resource, and prompt output and the other server/);
   assert.match(help.stdout, /A progress token and a message id stay unchanged/);
   assert.doesNotMatch(help.stdout, /a completion suggestion, a completion error/);
+  assert.match(help.stdout, /--via <npx\|path>/);
+  assert.match(help.stdout, /Default: npx when installed/);
+  assert.match(help.stdout, /path when run from a source checkout/);
+  assert.match(help.stdout, /default: <state>\/policy\.json if present/);
+  assert.match(help.stdout, /Options for "status", "approve", "log", and "dashboard"/);
+  assert.match(help.stdout, /Same directory as "run" and "http"/);
 });
 
 test("a launcher path ending in dist/cli.js is already our wrapper", () => {

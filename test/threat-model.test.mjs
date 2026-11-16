@@ -12,6 +12,11 @@ test("threat-model table cells stay one sentence each", () => {
   assert.match(text, /Partial: pattern matching on arguments/);
   assert.match(text, /Partial: pattern matching on text/);
   assert.match(text, /Partial: distinctive tokens only/);
-  assert.match(text, /one layer of base64/);
+  assert.match(text, /one layer of base64 is decoded too/);
+  assert.match(
+    text,
+    /npm, pip, netrc, git credentials, Docker, the GitHub CLI, GnuPG, Cargo, Vault, database passwords, Terraform, a Kubernetes service account, and rclone/,
+  );
+  assert.doesNotMatch(text, /padding left off/);
   assert.doesNotMatch(text, /one list further past/);
 });

@@ -192,6 +192,8 @@ test("dashboard shows pending changes and approves them, only with the token", a
     assert.match(page.headers.get("content-security-policy"), /default-src 'none'/);
     const html = await page.text();
     assert.match(html, /<title>toolwarden<\/title>/);
+    assert.match(html, /Restart the MCP client \(or reconnect the server\) for the change to take effect/);
+    assert.match(html, /listed tools at connect time keeps a newly approved tool hidden until it reconnects/);
     const script = /<script nonce="[^"]+">([\s\S]*?)<\/script>/.exec(html)[1];
     assert.doesNotThrow(() => new Script(script), "the page script is valid JavaScript");
 
