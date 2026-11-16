@@ -1,10 +1,23 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { test } from "node:test";
+import { CLI } from "./helpers.mjs";
 import { canonicalize, hashTool } from "../dist/canonical.js";
 import { isWrapped } from "../dist/init.js";
 import { slug } from "../dist/pins.js";
 import { Policy, DEFAULT_RULES } from "../dist/policy.js";
 import { scanResult, scanTool } from "../dist/scan.js";
+
+test("help describes --results the same way as the install guide", () => {
+  const help = spawnSync(process.execPath, [CLI, "--help"], { encoding: "utf8" });
+  assert.equal(help.status, 0);
+  assert.match(help.stdout, /What to do when text from a server looks like instructions/);
+  assert.match(help.stdout, /annotate \(default\) adds a notice, warn only reports/);
+  assert.match(help.stdout, /block withholds the text, off skips the check/);
+  assert.match(help.stdout, /tool, resource, and prompt output and the other server/);
+  assert.match(help.stdout, /A progress token and a message id stay unchanged/);
+  assert.doesNotMatch(help.stdout, /a completion suggestion, a completion error/);
+});
 
 test("a launcher path ending in dist/cli.js is already our wrapper", () => {
   const wrapped = (command, script) =>
