@@ -1,9 +1,24 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { canonicalize, hashTool } from "../dist/canonical.js";
+import { isWrapped } from "../dist/init.js";
 import { slug } from "../dist/pins.js";
 import { Policy, DEFAULT_RULES } from "../dist/policy.js";
 import { scanResult, scanTool } from "../dist/scan.js";
+
+test("a launcher path ending in dist/cli.js is already our wrapper", () => {
+  const wrapped = (command, script) =>
+    isWrapped({ command, args: [script, "run", "--name", "files", "--", "npx", "-y", "some-server"] });
+  assert.equal(wrapped("/usr/bin/node", "/opt/firewall/dist/cli.js"), true);
+  assert.equal(wrapped("node.exe", "C:\\firewall\\dist\\cli.js"), true);
+  assert.equal(wrapped("/usr/bin/node", "/opt/firewall/mydist/cli.js"), false);
+  assert.equal(
+    isWrapped({ command: "npx", args: ["-y", "toolwarden@0.2.1", "run", "--name", "files", "--", "npx"] }),
+    true,
+  );
+  assert.equal(isWrapped({ command: "node", args: ["/opt/firewall/dist/cli.js", "serve"] }), false);
+  assert.equal(isWrapped({ command: "npx", args: ["-y", "some-server", "/tmp"] }), false);
+});
 
 test("hashing ignores key order but not content", () => {
   const a = { name: "t", description: "d", inputSchema: { type: "object", properties: { x: { type: "string" } } } };
