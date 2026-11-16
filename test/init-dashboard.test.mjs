@@ -61,6 +61,31 @@ test("init wraps local servers, leaves the rest alone, and undo restores the fil
   assert.equal(readFileSync(file, "utf8"), original);
 });
 
+test("init leaves a wrapper alone even when its path does not contain the package name", () => {
+  const dir = mkdtempSync(join(tmpdir(), "toolwarden-init-"));
+  const file = join(dir, "mcp.json");
+  const wrapped = {
+    mcpServers: {
+      files: {
+        command: "/usr/bin/node",
+        args: ["/opt/firewall/dist/cli.js", "run", "--name", "files", "--", "npx", "-y", "some-server", "/tmp"],
+      },
+    },
+  };
+  writeFileSync(file, JSON.stringify(wrapped, null, 2) + "\n");
+
+  const again = runCli(["init", "--config", file, "--yes"]);
+  assert.match(again.stdout, /Every local server is already protected/);
+  assert.equal(readFileSync(file, "utf8"), JSON.stringify(wrapped, null, 2) + "\n");
+
+  const undo = runCli(["init", "--config", file, "--undo", "--yes"]);
+  assert.match(undo.stdout, /Restored in .*mcp\.json: files/);
+  assert.deepEqual(JSON.parse(readFileSync(file, "utf8")).mcpServers.files, {
+    command: "npx",
+    args: ["-y", "some-server", "/tmp"],
+  });
+});
+
 test("init gives the same name different toolwarden names when the commands differ", () => {
   const dir = mkdtempSync(join(tmpdir(), "toolwarden-init-"));
   const file = join(dir, "mcp.json");

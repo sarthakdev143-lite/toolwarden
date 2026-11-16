@@ -78,12 +78,18 @@ function argsOf(entry: Json): string[] {
   return Array.isArray(entry.args) ? entry.args.filter((a): a is string => typeof a === "string") : [];
 }
 
+/** Our published and source builds both start at dist/cli.js. A checkout whose directory is not named toolwarden still has to count as already protected. */
+function isOurLauncher(part: string): boolean {
+  if (/toolwarden/i.test(part)) return true;
+  return /(?:^|\/)dist\/cli\.js$/i.test(part.replaceAll("\\", "/"));
+}
+
 export function isWrapped(entry: Json): boolean {
   const args = argsOf(entry);
   const sep = args.indexOf("--");
   if (sep === -1 || !args.slice(0, sep).includes("run")) return false;
   const head = [typeof entry.command === "string" ? entry.command : "", ...args.slice(0, sep)];
-  return head.some((part) => /toolwarden/i.test(part));
+  return head.some(isOurLauncher);
 }
 
 function classify(entry: unknown): { kind: ServerKind; commandLine: string } {
