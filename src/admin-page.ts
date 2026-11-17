@@ -81,6 +81,7 @@ export function adminPage(
   nonce: string,
   account: { id: string; email: string; createdAt: string; stateDir: string },
   decisions: OperatorDecision[],
+  mcp: { clientUrl: string; sessionId: string } | null,
 ): string {
   const rows =
     decisions.length === 0
@@ -103,6 +104,17 @@ export function adminPage(
 <dt>Created</dt><dd>${escapeHtml(account.createdAt)}</dd>
 <dt>State directory</dt><dd>${escapeHtml(account.stateDir)}</dd>
 </dl>
+<h2>MCP proxy</h2>
+${
+  mcp === null
+    ? `<p class="meta">no MCP server is configured for this process. Set TOOLWARDEN_MCP_URL, then restart, to put this account in front of one.</p>`
+    : `<p>Point the AI app at this URL. Send <code>x-toolwarden-session</code> with the session below. This browser's cookie is that same session. The MCP server's Authorization header is its own sign-in, not this account.</p>
+<dl>
+<dt>MCP URL</dt><dd>${escapeHtml(mcp.clientUrl)}</dd>
+<dt>Header</dt><dd>x-toolwarden-session: ${escapeHtml(mcp.sessionId)}</dd>
+</dl>
+<p class="meta">Pins and the audit log for that server stay in this account's state directory. Another account does not share them.</p>`
+}
 <h2>Recent decisions</h2>
 ${rows}
 <h2>Known limits</h2>

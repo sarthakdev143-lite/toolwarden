@@ -155,19 +155,21 @@ function isLocalOrigin(origin: string | undefined): boolean {
   }
 }
 
-export function startHttpProxy(firewall: Firewall, opts: HttpProxyOptions): Promise<Server> {
-  const host = opts.host ?? "127.0.0.1";
-  let counter = 0;
+let proxyCounter = 0;
 
-  const handle = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
-    // A web page must not be able to reach this proxy: reject foreign Host and Origin
-    // headers (DNS-rebinding and cross-site requests).
-    if (!isLocalHost(req.headers.host) || !isLocalOrigin(req.headers.origin as string | undefined)) {
-      res.writeHead(403, { "content-type": "text/plain" }).end("toolwarden: this proxy only accepts local requests\n");
-      return;
-    }
-
-    const scope = "http" + ++counter;
+/**
+ * Forward one MCP HTTP request through the firewall. `reqUrl` is the path the
+ * upstream sees; the local proxy passes the request URL, and the hosted
+ * service passes `/mcp` rewritten onto the configured server.
+ */
+export async function proxyHttp(
+  firewall: Firewall,
+  target: string,
+  req: IncomingMessage,
+  res: ServerResponse,
+  reqUrl: string | undefined = req.url,
+): Promise<void> {
+    const scope = "http" + ++proxyCounter;
     const method = req.method ?? "GET";
     const headers = forwardHeaders(req);
     const abort = new AbortController();
@@ -220,7 +222,7 @@ export function startHttpProxy(firewall: Firewall, opts: HttpProxyOptions): Prom
 
     let upstream: Response;
     try {
-      upstream = await fetch(upstreamUrl(opts.target, req.url), {
+      upstream = await fetch(upstreamUrl(target, reqUrl), {
         method,
         headers,
         body: method === "GET" || method === "HEAD" ? undefined : body,
@@ -231,7 +233,7 @@ export function startHttpProxy(firewall: Firewall, opts: HttpProxyOptions): Prom
       if (abort.signal.aborted) return;
       res
         .writeHead(502, { "content-type": "text/plain" })
-        .end(`toolwarden: could not reach ${opts.target}: ${(err as Error).message}\n`);
+        .end(`toolwarden: could not reach ${target}: ${(err as Error).message}\n`);
       return;
     }
 
@@ -271,6 +273,19 @@ export function startHttpProxy(firewall: Firewall, opts: HttpProxyOptions): Prom
       // The client or the upstream went away mid-stream.
       res.end();
     }
+}
+
+export function startHttpProxy(firewall: Firewall, opts: HttpProxyOptions): Promise<Server> {
+  const host = opts.host ?? "127.0.0.1";
+
+  const handle = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+    // A web page must not be able to reach this proxy: reject foreign Host and Origin
+    // headers (DNS-rebinding and cross-site requests).
+    if (!isLocalHost(req.headers.host) || !isLocalOrigin(req.headers.origin as string | undefined)) {
+      res.writeHead(403, { "content-type": "text/plain" }).end("toolwarden: this proxy only accepts local requests\n");
+      return;
+    }
+    await proxyHttp(firewall, opts.target, req, res);
   };
 
   return new Promise((resolve, reject) => {

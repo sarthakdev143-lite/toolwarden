@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
 import { AccountStore } from "../dist/accounts.js";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -95,7 +96,9 @@ test("npm start is the hosted entry, and the guide names the command and env var
   assert.equal(help.status, 0);
   assert.match(help.stdout, /toolwarden serve/);
   assert.match(help.stdout, /--account <email>/);
-  assert.match(help.stdout, /HOST, PORT, TOOLWARDEN_DATA, TOOLWARDEN_PUBLIC_URL, and TOOLWARDEN_SIGNUP/);
+  assert.match(help.stdout, /HOST, PORT, TOOLWARDEN_DATA, TOOLWARDEN_PUBLIC_URL, TOOLWARDEN_SIGNUP, and TOOLWARDEN_MCP_URL/);
+  assert.match(readme, /TOOLWARDEN_MCP_URL/);
+  assert.match(readme, /x-toolwarden-session/);
 });
 
 test("the hosted process stays up and signs an operator in with a session, not MCP OAuth", async () => {
@@ -512,6 +515,212 @@ function waitForExit(child) {
   if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
   return new Promise((resolve) => child.on("exit", resolve));
 }
+
+function listen(server) {
+  return new Promise((resolve) => {
+    server.listen(0, "127.0.0.1", () => resolve(`http://127.0.0.1:${server.address().port}`));
+  });
+}
+
+/** A remote MCP server. Calls are recorded only when the proxy actually forwards them. */
+function fakeMcp() {
+  const state = {
+    tools: [ADD, { name: "read_file", description: "Read a file.", inputSchema: { type: "object" } }],
+    calls: [],
+    headers: [],
+  };
+  const server = createServer((req, res) => {
+    let raw = "";
+    req.on("data", (chunk) => {
+      raw += chunk;
+    });
+    req.on("end", () => {
+      state.headers.push({
+        url: req.url,
+        cookie: req.headers.cookie,
+        session: req.headers["x-toolwarden-session"],
+        authorization: req.headers.authorization,
+      });
+      if (req.url === "/.well-known/oauth-protected-resource") {
+        res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ authorization_servers: ["https://auth.example"] }));
+        return;
+      }
+      const msg = JSON.parse(raw || "{}");
+      if (!req.headers.authorization) {
+        res.writeHead(401, {
+          "content-type": "application/json",
+          "www-authenticate": 'Bearer realm="mcp", resource_metadata="/.well-known/oauth-protected-resource"',
+        }).end(JSON.stringify({ error: "invalid_token" }));
+        return;
+      }
+      let result;
+      if (msg.method === "tools/list") result = { tools: state.tools };
+      else if (msg.method === "tools/call") {
+        state.calls.push(msg.params);
+        result = { content: [{ type: "text", text: "ran" }], isError: false };
+      } else result = { ok: true };
+      res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ jsonrpc: "2.0", id: msg.id, result }));
+    });
+  });
+  return listen(server).then((origin) => ({ state, server, url: origin + "/mcp" }));
+}
+
+let rpcId = 1;
+async function mcpRpc(url, session, method, params, extraHeaders = {}) {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+      ...session,
+      ...extraHeaders,
+    },
+    body: JSON.stringify({ jsonrpc: "2.0", id: rpcId++, method, params }),
+  });
+  const text = await res.text();
+  let body = text;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    /* a refusal is plain text */
+  }
+  return { res, body, text };
+}
+
+test("the hosted proxy sits in front of an MCP server for the signed-in account", async () => {
+  const remote = await fakeMcp();
+  const dataDir = tempDir("data");
+  const host = await startHost(dataDir, { TOOLWARDEN_MCP_URL: remote.url });
+  try {
+    const anonymous = await mcpRpc(host.url + "mcp", {}, "tools/list", {});
+    assert.equal(anonymous.res.status, 401);
+    assert.equal(remote.state.headers.length, 0, "an unknown caller is not forwarded");
+
+    const adaRes = await postForm(host.url + "signup", "ada@example.com", PASSWORD);
+    const bobRes = await postForm(host.url + "signup", "bob@example.com", PASSWORD);
+    const ada = sessionFrom(adaRes);
+    const bob = sessionFrom(bobRes);
+    const adaAdmin = await (await fetch(host.url + "admin", { headers: { cookie: ada.pair } })).text();
+    assert.match(adaAdmin, /\/mcp/);
+    assert.match(adaAdmin, /x-toolwarden-session/);
+    assert.ok(adaAdmin.includes(ada.value));
+    assert.match(adaAdmin, /do not stop every attack/);
+
+    const adaList = await mcpRpc(host.url + "mcp", { cookie: ada.pair }, "tools/list", {}, { authorization: "Bearer upstream-token" });
+    assert.equal(adaList.res.status, 200);
+    assert.deepEqual(adaList.body.result.tools.map((tool) => tool.name), ["add", "read_file"]);
+    assert.equal(remote.state.headers.at(-1).authorization, "Bearer upstream-token");
+    assert.equal(remote.state.headers.at(-1).cookie, undefined);
+    assert.equal(remote.state.headers.at(-1).session, undefined);
+
+    remote.state.tools = [
+      { ...ADD, description: "Add two numbers. Version two." },
+      { name: "read_file", description: "Read a file.", inputSchema: { type: "object" } },
+    ];
+    const adaAgain = await mcpRpc(host.url + "mcp", { cookie: ada.pair }, "tools/list", {}, { authorization: "Bearer upstream-token" });
+    assert.deepEqual(adaAgain.body.result.tools.map((tool) => tool.name), ["read_file"]);
+
+    const beforeBlocked = remote.state.calls.length;
+    const blocked = await mcpRpc(host.url + "mcp", { cookie: ada.pair }, "tools/call", { name: "add", arguments: { a: 1 } }, { authorization: "Bearer upstream-token" });
+    assert.equal(blocked.body.result.isError, true);
+    assert.match(blocked.body.result.content[0].text, /Blocked by toolwarden/);
+    assert.equal(remote.state.calls.length, beforeBlocked, "a blocked call stays on this machine");
+
+    const bobList = await mcpRpc(host.url + "mcp", { "x-toolwarden-session": bob.value }, "tools/list", {}, { authorization: "Bearer bob-token" });
+    assert.deepEqual(
+      bobList.body.result.tools.map((tool) => tool.name),
+      ["add", "read_file"],
+      "bob's first listing is his own baseline, not ada's pins",
+    );
+    assert.equal(remote.state.headers.at(-1).authorization, "Bearer bob-token");
+    assert.equal(remote.state.headers.at(-1).session, undefined);
+    assert.equal(remote.state.headers.at(-1).cookie, undefined);
+
+    const bobCall = await mcpRpc(
+      host.url + "mcp",
+      { "x-toolwarden-session": bob.value },
+      "tools/call",
+      { name: "add", arguments: { a: 1 } },
+      { authorization: "Bearer bob-token" },
+    );
+    assert.equal(bobCall.body.result.isError, false);
+    assert.equal(remote.state.calls.length, beforeBlocked + 1);
+
+    const denied = await mcpRpc(
+      host.url + "mcp",
+      { cookie: bob.pair },
+      "tools/call",
+      { name: "read_file", arguments: { path: "/home/me/.aws/credentials" } },
+      { authorization: "Bearer bob-token" },
+    );
+    assert.match(denied.body.result.content[0].text, /Blocked by toolwarden policy/);
+    assert.equal(remote.state.calls.length, beforeBlocked + 1);
+
+    const adaState = (await adminApi(host.url, ada.pair)).body.account.stateDir;
+    const bobState = (await adminApi(host.url, bob.pair)).body.account.stateDir;
+    const adaPins = readdirSync(join(adaState, "pins")).filter((name) => name.endsWith(".json"));
+    const bobPins = readdirSync(join(bobState, "pins")).filter((name) => name.endsWith(".json"));
+    assert.equal(adaPins.length, 1);
+    assert.deepEqual(adaPins, bobPins);
+    const adaPin = JSON.parse(readFileSync(join(adaState, "pins", adaPins[0]), "utf8"));
+    const bobPin = JSON.parse(readFileSync(join(bobState, "pins", bobPins[0]), "utf8"));
+    assert.equal(adaPin.tools.add.definition.description, "Add two numbers.");
+    assert.equal(bobPin.tools.add.definition.description, "Add two numbers. Version two.");
+
+    const adaDecisions = (await adminApi(host.url, ada.pair)).body.decisions;
+    const bobDecisions = (await adminApi(host.url, bob.pair)).body.decisions;
+    assert.ok(adaDecisions.some((decision) => decision.event === "call_blocked"));
+    assert.equal(bobDecisions.some((decision) => decision.event === "call_blocked"), false);
+    assert.ok(bobDecisions.some((decision) => decision.event === "call_denied"));
+
+    const meta = await fetch(host.url + ".well-known/oauth-protected-resource", { headers: { cookie: ada.pair } });
+    assert.equal(meta.status, 200);
+    assert.deepEqual((await meta.json()).authorization_servers, ["https://auth.example"]);
+    const hidden = await fetch(host.url + ".well-known/oauth-protected-resource");
+    assert.equal(hidden.status, 401);
+  } finally {
+    await host.stop();
+    remote.server.close();
+  }
+});
+
+test("the hosted proxy stays off until an MCP server is configured", async () => {
+  const dataDir = tempDir("data");
+  const host = await startHost(dataDir);
+  try {
+    const created = await postForm(host.url + "signup", "ada@example.com", PASSWORD);
+    const session = sessionFrom(created);
+    const missing = await mcpRpc(host.url + "mcp", { cookie: session.pair }, "tools/list", {});
+    assert.equal(missing.res.status, 404);
+    assert.match(missing.text, /no MCP server is configured/);
+    const page = await (await fetch(host.url + "admin", { headers: { cookie: session.pair } })).text();
+    assert.match(page, /no MCP server is configured/);
+    assert.doesNotMatch(page, /x-toolwarden-session/);
+  } finally {
+    await host.stop();
+  }
+});
+
+test("a bad MCP server URL refuses to start", () => {
+  const home = tempDir("home");
+  const dataDir = tempDir("data");
+  const bad = spawnSync(process.execPath, [CLI, "serve"], {
+    encoding: "utf8",
+    timeout: 5000,
+    env: {
+      ...process.env,
+      HOME: home,
+      USERPROFILE: home,
+      HOST: "127.0.0.1",
+      PORT: "0",
+      TOOLWARDEN_DATA: dataDir,
+      TOOLWARDEN_HOME: join(home, "cli-state"),
+      TOOLWARDEN_MCP_URL: "not a url",
+    },
+  });
+  assert.equal(bad.status, 2);
+  assert.match(bad.stderr, /TOOLWARDEN_MCP_URL/);
+});
 
 test("an https public URL marks the session cookie Secure", async () => {
   const dataDir = tempDir("data");
