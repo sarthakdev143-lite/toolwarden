@@ -3,7 +3,8 @@ import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { AccountStore } from "../dist/accounts.js";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { Script } from "node:vm";
 import { CLI, FAKE, connect, sandbox, startCli } from "./helpers.mjs";
@@ -453,11 +454,14 @@ test("the local dashboard shows the account, recent decisions, and the known lim
 test("npm start listens until it is stopped", async () => {
   const dataDir = tempDir("data");
   const { env } = isolatedEnv(dataDir, { HOST: "127.0.0.1", PORT: "0" });
-  const child = spawn("npm", ["start"], {
-    cwd: new URL("..", import.meta.url),
+  // Windows ships npm as npm.cmd beside node.exe. spawn does not resolve that name.
+  const npmBin = process.platform === "win32" ? join(dirname(process.execPath), "npm.cmd") : "npm";
+  const child = spawn(npmBin, ["start"], {
+    cwd: fileURLToPath(new URL("..", import.meta.url)),
     env,
     stdio: ["ignore", "pipe", "pipe"],
-    detached: true,
+    detached: process.platform !== "win32",
+    windowsHide: true,
   });
   let output = "";
   try {
@@ -466,6 +470,7 @@ test("npm start listens until it is stopped", async () => {
         child.kill();
         reject(new Error("npm start did not listen.\n" + output));
       }, 15000);
+      child.on("error", reject);
       const onData = (chunk) => {
         output += chunk.toString();
         const found = /listening at (http:\/\/127\.0\.0\.1:\d+\/)/.exec(output);
@@ -484,17 +489,32 @@ test("npm start listens until it is stopped", async () => {
     const again = await fetch(match);
     assert.equal(again.status, 200);
   } finally {
-    // npm does not take its child with it. Signal the whole group so `node dist/cli.js serve` stops too.
-    try {
-      process.kill(-child.pid, "SIGTERM");
-    } catch {
-      /* the group already exited */
-    }
-    if (child.exitCode === null && child.signalCode === null) {
-      await new Promise((resolve) => child.on("exit", resolve));
-    }
+    // npm does not take its child with it. Stop the process group (Windows: the process tree).
+    await stopNpmTree(child);
   }
 });
+
+function stopNpmTree(child) {
+  if (child.pid === undefined) return Promise.resolve();
+  if (process.platform === "win32") {
+    return new Promise((resolve) => {
+      const killer = spawn("taskkill", ["/pid", String(child.pid), "/t", "/f"], { stdio: "ignore", windowsHide: true });
+      killer.on("exit", () => resolve());
+      killer.on("error", () => resolve());
+    }).then(() => waitForExit(child));
+  }
+  try {
+    process.kill(-child.pid, "SIGTERM");
+  } catch {
+    /* the group already exited */
+  }
+  return waitForExit(child);
+}
+
+function waitForExit(child) {
+  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
+  return new Promise((resolve) => child.on("exit", resolve));
+}
 
 test("an https public URL marks the session cookie Secure", async () => {
   const dataDir = tempDir("data");
