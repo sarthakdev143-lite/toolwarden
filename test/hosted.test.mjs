@@ -3,7 +3,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { AccountStore } from "../dist/accounts.js";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { Script } from "node:vm";
@@ -454,15 +454,12 @@ test("the local dashboard shows the account, recent decisions, and the known lim
 test("npm start listens until it is stopped", async () => {
   const dataDir = tempDir("data");
   const { env } = isolatedEnv(dataDir, { HOST: "127.0.0.1", PORT: "0" });
-  // Windows ships npm as npm.cmd beside node.exe. spawn does not resolve that name.
-  const npmBin = process.platform === "win32" ? join(dirname(process.execPath), "npm.cmd") : "npm";
-  const child = spawn(npmBin, ["start"], {
-    cwd: fileURLToPath(new URL("..", import.meta.url)),
-    env,
-    stdio: ["ignore", "pipe", "pipe"],
-    detached: process.platform !== "win32",
-    windowsHide: true,
-  });
+  const cwd = fileURLToPath(new URL("..", import.meta.url));
+  // npm on Windows is a .cmd script. spawn refuses that with EINVAL unless cmd.exe runs it.
+  const child =
+    process.platform === "win32"
+      ? spawn("npm start", { cwd, env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true, shell: true })
+      : spawn("npm", ["start"], { cwd, env, stdio: ["ignore", "pipe", "pipe"], detached: true });
   let output = "";
   try {
     const match = await new Promise((resolve, reject) => {
