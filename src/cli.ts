@@ -5,6 +5,7 @@ import { homedir } from "node:os";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
+import { AccountStore, cliStateDir } from "./accounts.js";
 import { AuditLog } from "./audit.js";
 import { startDashboard } from "./dashboard.js";
 import { Firewall, type Mode, type ResultMode } from "./firewall.js";
@@ -14,6 +15,7 @@ import { knownConfigLocations, makeNamer, rewriteFile, scanAll, type ScannedFile
 import { approve, listServers, loadPins, savePins, slug, type PinFile } from "./pins.js";
 import { loadPolicy, type Policy } from "./policy.js";
 import { runProxy } from "./proxy.js";
+import { startHosted } from "./serve.js";
 
 // The version lives in package.json only, so the two can never drift apart.
 const VERSION = (JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { version: string }).version;
@@ -28,6 +30,7 @@ Usage:
   toolwarden approve <server> [tool...]          Approve the definitions waiting right now (all of them if none are named)
   toolwarden log [-n <count>]                    Show recent audit log entries
   toolwarden dashboard [--port 7878]             Open a local web page for reviews and the log
+  toolwarden serve                               Listen for operator sign-in until stopped
 
 Options for "run" and "http":
   --name <id>          Name for this server (default: derived from the command or URL)
@@ -41,9 +44,13 @@ Options for "run" and "http":
   --no-default-rules   Turn off the built-in credential-path rules
   --no-flow            Turn off tracking of data moving between servers
   --state <dir>        Where pins and logs live (default: ~/.toolwarden, or $TOOLWARDEN_HOME)
+  --account <email>    Use this operator account's own state directory. Do not combine with --state.
 
 Options for "status", "approve", "log", and "dashboard":
   --state <dir>        Same directory as "run" and "http"
+  --account <email>    Same account directory as "run" and "http"
+
+"serve" reads HOST, PORT, TOOLWARDEN_DATA, TOOLWARDEN_PUBLIC_URL, and TOOLWARDEN_SIGNUP from the environment.
 
 Options for "http":
   --target <url>       The remote MCP server's URL
@@ -66,7 +73,23 @@ function fail(message: string): never {
 }
 
 function defaultStateDir(): string {
-  return process.env.TOOLWARDEN_HOME ?? join(homedir(), ".toolwarden");
+  return cliStateDir();
+}
+
+/** An account already has a directory. --state would point two operators at one folder. */
+function resolveStateDir(values: Record<string, string>): string {
+  if (values["--account"] && values["--state"]) {
+    fail("--account has its own state directory; do not pass --state as well");
+  }
+  if (!values["--account"]) return values["--state"] ?? defaultStateDir();
+  const dataDir = process.env.TOOLWARDEN_DATA ?? join(homedir(), ".toolwarden-data");
+  try {
+    const account = new AccountStore(dataDir).findByEmail(values["--account"]);
+    if (!account) fail(`no account for ${values["--account"]}`);
+    return account.stateDir;
+  } catch (err) {
+    fail((err as Error).message);
+  }
 }
 
 /** Pull "--flag value" style options out of an argument list. */
@@ -103,7 +126,7 @@ function defaultServerName(command: string, args: string[]): string {
   return slug(basename(descriptive ?? command)).slice(0, 40) + "-" + digest;
 }
 
-const SHARED_VALUE_FLAGS = ["--name", "--mode", "--results", "--policy", "--state"];
+const SHARED_VALUE_FLAGS = ["--name", "--mode", "--results", "--policy", "--state", "--account"];
 const SHARED_BOOL_FLAGS = ["--no-default-rules", "--no-flow"];
 
 /** Build a firewall from the options that "run" and "http" share. */
@@ -120,7 +143,7 @@ function buildFirewall(
     fail("--results must be one of: annotate, warn, block, off");
   }
 
-  const stateDir = values["--state"] ?? defaultStateDir();
+  const stateDir = resolveStateDir(values);
   const server = values["--name"] ? slug(values["--name"]) : fallbackName;
 
   const defaultPolicyPath = join(stateDir, "policy.json");
@@ -240,8 +263,8 @@ function printServer(pins: PinFile): void {
 }
 
 function cmdStatus(argv: string[]): number {
-  const { values, rest } = parseOptions(argv, ["--state"], []);
-  const stateDir = values["--state"] ?? defaultStateDir();
+  const { values, rest } = parseOptions(argv, ["--state", "--account"], []);
+  const stateDir = resolveStateDir(values);
   const servers = rest.length > 0 ? rest.map(slug) : listServers(stateDir);
   if (servers.length === 0) {
     console.log('No servers pinned yet. Run "toolwarden init" to protect the MCP servers on this machine.');
@@ -263,8 +286,8 @@ function cmdStatus(argv: string[]): number {
 }
 
 function cmdApprove(argv: string[]): number {
-  const { values, rest } = parseOptions(argv, ["--state"], []);
-  const stateDir = values["--state"] ?? defaultStateDir();
+  const { values, rest } = parseOptions(argv, ["--state", "--account"], []);
+  const stateDir = resolveStateDir(values);
   const [serverArg, ...tools] = rest;
   if (!serverArg) fail("approve needs a server name. See: toolwarden status");
   const pins = loadPins(stateDir, slug(serverArg));
@@ -283,8 +306,8 @@ function cmdApprove(argv: string[]): number {
 }
 
 function cmdLog(argv: string[]): number {
-  const { values } = parseOptions(argv, ["--state", "-n"], []);
-  const stateDir = values["--state"] ?? defaultStateDir();
+  const { values } = parseOptions(argv, ["--state", "--account", "-n"], []);
+  const stateDir = resolveStateDir(values);
   const count = Number.parseInt(values["-n"] ?? "30", 10);
   if (!Number.isFinite(count) || count <= 0) fail("-n needs a positive number");
   const path = join(stateDir, "audit.log");
@@ -435,8 +458,8 @@ async function cmdInit(argv: string[]): Promise<number> {
 }
 
 async function cmdDashboard(argv: string[]): Promise<number> {
-  const { values } = parseOptions(argv, ["--state", "--port"], []);
-  const stateDir = values["--state"] ?? defaultStateDir();
+  const { values } = parseOptions(argv, ["--state", "--account", "--port"], []);
+  const stateDir = resolveStateDir(values);
   const port = Number.parseInt(values["--port"] ?? "7878", 10);
   if (!Number.isInteger(port) || port < 0 || port > 65535) fail("--port must be a number between 0 and 65535");
   let dashboard;
@@ -454,6 +477,42 @@ async function cmdDashboard(argv: string[]): Promise<number> {
   });
 }
 
+async function cmdServe(argv: string[]): Promise<number> {
+  if (argv.length > 0) {
+    fail('serve reads HOST, PORT, TOOLWARDEN_DATA, TOOLWARDEN_PUBLIC_URL, and TOOLWARDEN_SIGNUP from the environment');
+  }
+  const host = process.env.HOST ?? "0.0.0.0";
+  if (host === "") fail("HOST must be an address");
+  const port = Number.parseInt(process.env.PORT ?? "8788", 10);
+  if (!Number.isInteger(port) || port < 0 || port > 65535) fail("PORT must be a number between 0 and 65535");
+  let hosted;
+  try {
+    hosted = await startHosted({
+      host,
+      port,
+      dataDir: process.env.TOOLWARDEN_DATA ?? join(homedir(), ".toolwarden-data"),
+      publicUrl: process.env.TOOLWARDEN_PUBLIC_URL,
+      signup: process.env.TOOLWARDEN_SIGNUP,
+    });
+  } catch (err) {
+    fail((err as Error).message);
+  }
+  const lines: string[] = [];
+  if (hosted.publicUrl) lines.push(`toolwarden public url: ${hosted.publicUrl}`);
+  lines.push(`toolwarden listening at ${hosted.url}`);
+  lines.push("Operator sign-in is an email and password on this server. Press Ctrl+C to stop.");
+  process.stdout.write(lines.join("\n") + "\n");
+  return new Promise((resolveExit) => {
+    const stop = () => {
+      // Drop open browsers and keep-alive clients, or close() waits forever.
+      hosted.server.closeAllConnections();
+      hosted.server.close(() => resolveExit(0));
+    };
+    process.on("SIGINT", stop);
+    process.on("SIGTERM", stop);
+  });
+}
+
 async function main(): Promise<void> {
   const [command, ...rest] = process.argv.slice(2);
   switch (command) {
@@ -465,6 +524,8 @@ async function main(): Promise<void> {
       process.exit(await cmdInit(rest));
     case "dashboard":
       process.exit(await cmdDashboard(rest));
+    case "serve":
+      process.exit(await cmdServe(rest));
     case "status":
       process.exit(cmdStatus(rest));
     case "approve":

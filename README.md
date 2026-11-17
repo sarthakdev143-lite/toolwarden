@@ -17,7 +17,7 @@ AI app  ⇄  toolwarden  ⇄  MCP server
 - **Sets itself up.** `toolwarden init` finds the MCP servers configured on your machine and protects them in one step, with a backup and an undo.
 - **Shows you everything.** A local dashboard for reviewing changes and reading the audit log.
 
-No dependencies at runtime. Nothing leaves your machine.
+No dependencies at runtime. The firewall keeps pins and the audit log on the machine that runs it, and it does not send telemetry.
 
 ## Why
 
@@ -154,6 +154,7 @@ The dashboard can approve changes, so it is locked down: it listens on `127.0.0.
 | `toolwarden approve <server> [tool...]` | Approve the definitions waiting right now |
 | `toolwarden log [-n 30]` | Show recent audit log entries |
 | `toolwarden dashboard [--port 7878]` | Open the local dashboard |
+| `toolwarden serve` | Listen for operator sign-in until stopped. See [Hosted service](#hosted-service) |
 
 Options for `run` and `http`:
 
@@ -166,6 +167,7 @@ Options for `run` and `http`:
 | `--no-default-rules` | Turn off the built-in credential rules. |
 | `--no-flow` | Turn off tracking of data moving between servers. |
 | `--state <dir>` | Where pins and the log live. Defaults to `~/.toolwarden` or `$TOOLWARDEN_HOME`. `status`, `approve`, `log`, and `dashboard` use the same directory. |
+| `--account <email>` | Use that operator account's own state directory from `TOOLWARDEN_DATA`. Do not combine it with `--state`. |
 
 ## Writing your own rules
 
@@ -218,6 +220,40 @@ A security tool should be clear about its limits.
 It is one layer. Keep giving servers the least access they need, and be careful with servers you did not write.
 
 The full reasoning is in the [threat model](docs/threat-model.md). To report a security problem, see [SECURITY.md](SECURITY.md).
+
+## Hosted service
+
+The local commands stay as they are. To leave a process running so an operator can sign in:
+
+```bash
+npm install
+npm run build
+npm start
+```
+
+`npm start` runs `node dist/cli.js serve`. `toolwarden serve` is the same process. It listens until you stop it and prints a URL.
+
+| Variable | Meaning |
+|---|---|
+| `HOST` | Address to bind. Default `0.0.0.0`. |
+| `PORT` | Port to bind. Default `8788`. |
+| `TOOLWARDEN_DATA` | Accounts, sessions, and each account's pins and audit log. Default `~/.toolwarden-data`. This is not the local CLI directory `~/.toolwarden`. |
+| `TOOLWARDEN_PUBLIC_URL` | Optional URL you give operators. When it starts with `https://`, the session cookie is marked Secure. |
+| `TOOLWARDEN_SIGNUP` | `open` (default) lets anyone who can reach the URL create an account. `closed` refuses new accounts. Existing accounts can still sign in. Create the accounts, then restart with `closed`. |
+
+Open the printed URL. Create an account with an email and a password. That session belongs to the person operating toolwarden. It is not the OAuth sign-in a remote MCP server may ask the AI app for.
+
+Each account has its own state directory under `TOOLWARDEN_DATA`. Two accounts do not share pins or the audit log. Point the firewall at one account, and do not pass `--state` as well:
+
+```bash
+toolwarden run --account you@example.com --name files -- npx -y some-mcp-server
+toolwarden http --account you@example.com --name linear --target https://mcp.linear.app/mcp
+toolwarden dashboard --account you@example.com
+```
+
+`/admin` shows the signed-in account, recent decisions from that account's audit log, and the known limits. The local dashboard shows the same three things for the state directory it was given.
+
+Hosting this service does not change the scanner. The checks do not stop every attack. There is no payment provider and no SSO vendor. This build does not verify email or reset a lost password. There is no organization, role, or shared membership. One account is one person and one state directory. This process does not proxy MCP traffic. Keep using `toolwarden run` or `toolwarden http` for each server. Terminate TLS in your own proxy if operators connect over the network. One process should own `TOOLWARDEN_DATA`.
 
 ## Development
 

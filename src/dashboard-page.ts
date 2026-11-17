@@ -85,6 +85,8 @@ details.server .body { padding: 0 16px 14px; }
 .row .what .where { font-family: var(--mono); font-size: 13px; font-weight: 600; }
 .row .what .detail { color: var(--muted); }
 .error { background: var(--bad-bg); color: var(--bad); padding: 12px 16px; border-radius: 10px; margin-bottom: 20px; }
+.limits { margin: 0; padding-left: 18px; }
+.limits li { margin: 0 0 8px; }
 [hidden] { display: none !important; }
 @media (max-width: 640px) {
   .stats { grid-template-columns: repeat(2, 1fr); }
@@ -104,6 +106,21 @@ details.server .body { padding: 0 16px 14px; }
   </header>
 
   <div id="error" class="error" hidden></div>
+
+  <section>
+    <h2>Account</h2>
+    <div id="account"></div>
+  </section>
+
+  <section>
+    <h2>Recent decisions</h2>
+    <div id="decisions"></div>
+  </section>
+
+  <section>
+    <h2>Known limits</h2>
+    <ul class="limits" id="limits">__LIMITS__</ul>
+  </section>
 
   <div class="stats">
     <div class="stat"><b id="s-servers">0</b><span>servers protected</span></div>
@@ -361,6 +378,39 @@ details.server .body { padding: 0 16px 14px; }
 
   var latestRecords = [];
 
+  function renderAccount(account) {
+    var root = $("account");
+    root.textContent = "";
+    if (!account || !account.email) {
+      root.appendChild(el("div", "empty", "No account is attached to this state directory. Local commands read only this directory."));
+      return;
+    }
+    var card = el("div", "card");
+    card.appendChild(el("div", "tool", account.email));
+    card.appendChild(el("div", "meta", "Account " + account.id));
+    root.appendChild(card);
+  }
+
+  function renderDecisions(decisions) {
+    var root = $("decisions");
+    root.textContent = "";
+    if (!decisions || decisions.length === 0) {
+      root.appendChild(el("div", "empty", "No decisions recorded for this state directory yet."));
+      return;
+    }
+    decisions.forEach(function (d) {
+      var row = el("div", "row");
+      var t = el("time", null, d.ts ? new Date(d.ts).toLocaleString() : "");
+      row.appendChild(t);
+      row.appendChild(el("span", "badge plain", d.event));
+      var what = el("div", "what");
+      what.appendChild(el("span", "where", (d.server || "") + (d.tool ? " / " + d.tool : "")));
+      if (d.summary) what.appendChild(el("span", "detail", "  " + d.summary));
+      row.appendChild(what);
+      root.appendChild(row);
+    });
+  }
+
   function refresh() {
     return Promise.all([api("/api/state"), api("/api/log?limit=500")]).then(function (results) {
       var state = results[0];
@@ -370,6 +420,8 @@ details.server .body { padding: 0 16px 14px; }
       $("s-tools").textContent = state.servers.reduce(function (n, s) { return n + s.tools.length; }, 0);
       $("s-blocked").textContent = state.stats.blocked;
       $("s-calls").textContent = state.stats.calls;
+      renderAccount(state.account);
+      renderDecisions(state.decisions);
       renderPending(state.servers);
       renderServers(state.servers);
       renderLog(latestRecords);
