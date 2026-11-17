@@ -15,8 +15,8 @@ import { collectText, matchForms } from "./scan.js";
  * fingerprints (hashes, never the values) of the distinctive tokens in it,
  * including text nested in a list or object and one layer of base64. A
  * progress token and a message id are left unchanged so the exchange still
- * matches. A token written with a compatibility character or an invisible
- * character is the same token. When a call to a *different* server carries one
+ * matches. A token written with a compatibility character, an invisible
+ * character, or a look-alike letter is the same token. When a call to a *different* server carries one
  * of those tokens in its arguments, in a filesystem root, in a client message,
  * in an answer, or in an object key, that is a data flow between servers: the
  * pattern behind "read a secret with one tool, send it out with another".

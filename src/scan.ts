@@ -1,10 +1,9 @@
 /**
  * Cheap heuristics for instructions hidden inside a tool definition.
  *
- * Pinning protects against a tool changing later, but it trusts whatever the
- * tool said the first time. These checks flag definitions that already look
- * like they are talking to the model instead of describing a tool.
- * They produce warnings, never blocks: heuristics have false positives.
+ * These checks return findings. The firewall does not pin a first definition
+ * that has one, because that definition is already talking to the model.
+ * A sentence that merely looks similar can still match, so a person reviews it.
  */
 
 import { percentDecoded } from "./percent.js";
@@ -31,10 +30,91 @@ function hasNonAscii(value: string): boolean {
   return false;
 }
 
+/** Letters that look like ASCII but are not folded by NFKC. */
+const CONFUSABLES = new Map<number, string>([
+  [0x0430, "a"], [0x0410, "A"], [0x0435, "e"], [0x0415, "E"], [0x043e, "o"], [0x041e, "O"],
+  [0x0440, "p"], [0x0420, "P"], [0x0441, "c"], [0x0421, "C"], [0x0443, "y"], [0x0423, "Y"],
+  [0x0445, "x"], [0x0425, "X"], [0x0456, "i"], [0x0406, "I"], [0x0458, "j"], [0x0408, "J"],
+  [0x0455, "s"], [0x0405, "S"], [0x04bb, "h"], [0x04ba, "H"], [0x0454, "e"], [0x0404, "E"],
+  [0x0501, "d"], [0x0500, "D"], [0x0261, "g"], [0x04cf, "i"], [0x0131, "i"],
+  [0x03bf, "o"], [0x039f, "O"], [0x03b9, "i"], [0x0399, "I"], [0x03ba, "k"], [0x039a, "K"],
+  [0x03c4, "t"], [0x03a4, "T"], [0x03c7, "x"], [0x03a7, "X"], [0x03c1, "p"], [0x03a1, "P"],
+]);
+
+const NAMED_ENTITIES: Record<string, string> = {
+  lt: "<", gt: ">", amp: "&", quot: '"', apos: "'", nbsp: " ",
+};
+
+function foldConfusables(value: string): string | null {
+  if (!hasNonAscii(value)) return null;
+  let changed = false;
+  let out = "";
+  for (const ch of value) {
+    const mapped = CONFUSABLES.get(ch.codePointAt(0)!);
+    if (mapped !== undefined) {
+      changed = true;
+      out += mapped;
+    } else out += ch;
+  }
+  return changed ? out : null;
+}
+
+/** One layer of HTML character references. Named references cover the characters used to disguise a tag. */
+function htmlDecoded(value: string): string | null {
+  if (!value.includes("&")) return null;
+  let changed = false;
+  const decoded = value.replace(/&(#x[0-9a-fA-F]+|#\d+|[a-zA-Z][a-zA-Z0-9]+);/g, (all, body: string) => {
+    if (body.charCodeAt(0) === 35) {
+      const hex = body.charCodeAt(1) === 120 || body.charCodeAt(1) === 88;
+      const cp = Number.parseInt(hex ? body.slice(2) : body.slice(1), hex ? 16 : 10);
+      if (!Number.isInteger(cp) || cp < 0 || cp > 0x10ffff) return all;
+      changed = true;
+      return String.fromCodePoint(cp);
+    }
+    const named = NAMED_ENTITIES[body];
+    if (named === undefined) return all;
+    changed = true;
+    return named;
+  });
+  return changed ? decoded : null;
+}
+
+/** One layer of a literal `\uXXXX` or `\xNN` escape that JSON did not already decode. */
+function escapesDecoded(value: string): string | null {
+  if (!/\\(?:u[0-9a-fA-F]{4}|x[0-9a-fA-F]{2})/.test(value)) return null;
+  let changed = false;
+  const decoded = value.replace(/\\u([0-9a-fA-F]{4})|\\x([0-9a-fA-F]{2})/g, (all, u: string | undefined, x: string | undefined) => {
+    const cp = Number.parseInt((u ?? x)!, 16);
+    if (!Number.isInteger(cp) || cp > 0x10ffff) return all;
+    changed = true;
+    return String.fromCodePoint(cp);
+  });
+  return changed ? decoded : null;
+}
+
 /**
- * The string itself, plus the same string with percent-encoding undone and with
- * compatibility characters and invisible characters folded. Each result is
- * folded again, so text cannot hide behind one layer of either disguise.
+ * Join a token that was split into single letters. A separator inside a longer
+ * word, such as the underscore in a real token, stays put.
+ */
+function unsplit(value: string): string | null {
+  const joinSingles = (body: string, separators: RegExp) =>
+    /^(?:[0-9A-Za-z].)+[0-9A-Za-z]$/.test(body.replace(separators, ".")) ? body.replace(separators, "") : body;
+  const dotted = value.replace(
+    /(^|[^0-9A-Za-z])((?:[0-9A-Za-z][._\-\u00b7\u2024\u2219]){2,}[0-9A-Za-z])(?=[^0-9A-Za-z]|$)/g,
+    (_all, lead: string, body: string) => lead + joinSingles(body, /[._\-\u00b7\u2024\u2219]/g),
+  );
+  const spaced = dotted.replace(
+    /(^|[^0-9A-Za-z])((?:[0-9A-Za-z][ \t]){2,}[0-9A-Za-z])(?=[^0-9A-Za-z]|$)/g,
+    (_all, lead: string, body: string) => lead + joinSingles(body, /[ \t]/g),
+  );
+  return spaced === value ? null : spaced;
+}
+
+/**
+ * The string itself, plus the same string with one disguise undone: percent-encoding,
+ * an HTML character reference, a slash-u or slash-x escape, compatibility or invisible
+ * characters, look-alike letters, or separators inserted into a token. Each result is
+ * folded again, up to a fixed budget, so those disguises can be stacked once.
  */
 export function matchForms(value: string): string[] {
   const out: string[] = [];
@@ -45,7 +125,7 @@ export function matchForms(value: string): string[] {
     out.push(s);
   };
   add(value);
-  for (let i = 0; i < out.length && i < 8; i++) {
+  for (let i = 0; i < out.length && i < 32; i++) {
     const s = out[i];
     if (s === undefined) continue;
     const decoded = percentDecoded(s);
@@ -54,6 +134,14 @@ export function matchForms(value: string): string[] {
       const folded = comparableText(s);
       if (folded !== s) add(folded);
     }
+    const html = htmlDecoded(s);
+    if (html !== null) add(html);
+    const escapes = escapesDecoded(s);
+    if (escapes !== null) add(escapes);
+    const lookalikes = foldConfusables(s);
+    if (lookalikes !== null) add(lookalikes);
+    const joined = unsplit(s);
+    if (joined !== null) add(joined);
   }
   return out;
 }
@@ -132,7 +220,23 @@ function collectStrings(value: unknown, out: string[], decode: boolean, decodeIt
     return;
   }
   if (Array.isArray(value)) {
+    const run: string[] = [];
+    const flushRun = () => {
+      if (run.length >= 2 && run.every((part) => part.length <= 24)) {
+        const joined = run.join("");
+        if (joined.length <= 100_000) {
+          out.push(joined);
+          if (decode) {
+            const text = decodedBlob(joined);
+            if (text !== null) out.push(text);
+          }
+        }
+      }
+      run.length = 0;
+    };
     for (const item of value) {
+      if (typeof item === "string") run.push(item);
+      else flushRun();
       if (typeof item === "string") collectStrings(item, out, decode, decodeItems, decodeNested, extra, false, false, 0);
       else if (Array.isArray(item)) {
         const oneMore = objectLists && nestedLists;
@@ -141,6 +245,7 @@ function collectStrings(value: unknown, out: string[], decode: boolean, decodeIt
         collectStrings(item, out, oneMore || deeperMore ? true : (objectLists ? false : decode), decodeItems, decodeNested, extra, oneMore || deeperMore, false, nextDeeper);
       } else collectStrings(item, out, decodeItems, false, decodeNested, extra, false, false, 0);
     }
+    flushRun();
     return;
   }
   if (value !== null && typeof value === "object") {

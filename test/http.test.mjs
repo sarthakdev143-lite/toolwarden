@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createServer, request as httpRequest } from "node:http";
 import { test } from "node:test";
+import { upstreamUrl } from "../dist/http.js";
 import { sandbox, startCli } from "./helpers.mjs";
 
 const ADD = { name: "add", description: "Add two numbers.", inputSchema: { type: "object" } };
@@ -109,6 +110,73 @@ for (const sse of [false, true]) {
     }
   });
 }
+
+test("http proxy passes an OAuth sign-in challenge through", async () => {
+  const hits = [];
+  const remote = createServer((req, res) => {
+    let raw = "";
+    req.on("data", (c) => (raw += c));
+    req.on("end", () => {
+      hits.push({ method: req.method, url: req.url, authorization: req.headers.authorization });
+      if (req.url === "/.well-known/oauth-protected-resource") {
+        res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({
+          resource: "https://mcp.example/mcp",
+          authorization_servers: ["https://auth.example"],
+        }));
+        return;
+      }
+      if (req.url === "/authorize") {
+        res.writeHead(302, { location: "https://auth.example/authorize?state=abc", "content-type": "text/html" }).end("<a>sign in</a>");
+        return;
+      }
+      if (!req.headers.authorization) {
+        res.writeHead(401, {
+          "content-type": "application/json",
+          "www-authenticate": 'Bearer realm="mcp", resource_metadata="/.well-known/oauth-protected-resource"',
+        }).end(JSON.stringify({ error: "invalid_token", error_description: "sign in required" }));
+        return;
+      }
+      const msg = JSON.parse(raw);
+      res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({
+        jsonrpc: "2.0", id: msg.id, result: { tools: [ADD] },
+      }));
+    });
+  });
+  const origin = await new Promise((resolve) => {
+    remote.listen(0, "127.0.0.1", () => resolve(`http://127.0.0.1:${remote.address().port}`));
+  });
+  const box = sandbox([]);
+  const proxy = await startProxy(box, { url: origin + "/mcp" });
+  try {
+    const denied = await fetch(proxy.url, {
+      method: "POST",
+      redirect: "manual",
+      headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }),
+    });
+    assert.equal(denied.status, 401);
+    assert.match(denied.headers.get("www-authenticate"), /resource_metadata="\/\.well-known\/oauth-protected-resource"/);
+    assert.deepEqual(await denied.json(), { error: "invalid_token", error_description: "sign in required" });
+
+    const meta = await fetch(new URL("/.well-known/oauth-protected-resource", proxy.url));
+    assert.equal(meta.status, 200);
+    assert.deepEqual((await meta.json()).authorization_servers, ["https://auth.example"]);
+    assert.equal(hits.find((hit) => hit.url.startsWith("/.well-known")).url, "/.well-known/oauth-protected-resource");
+
+    const redir = await fetch(new URL("/authorize", proxy.url), { redirect: "manual" });
+    assert.equal(redir.status, 302);
+    assert.equal(redir.headers.get("location"), "https://auth.example/authorize?state=abc");
+
+    const ok = await rpc(proxy.url, "tools/list", {}, { authorization: "Bearer token-1" });
+    assert.equal(ok.msg.result.tools[0].name, "add");
+    assert.equal(hits.at(-1).authorization, "Bearer token-1");
+    assert.equal(upstreamUrl(origin + "/mcp", "/"), origin + "/mcp");
+    assert.equal(upstreamUrl(origin + "/mcp", "/.well-known/oauth-protected-resource"), origin + "/.well-known/oauth-protected-resource");
+  } finally {
+    await proxy.stop();
+    remote.close();
+  }
+});
 
 test("http proxy refuses requests that did not come from this machine", async () => {
   const box = sandbox([]);

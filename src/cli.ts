@@ -216,8 +216,9 @@ function printServer(pins: PinFile): void {
   for (const name of pending) {
     const p = pins.pending[name]!;
     const next = describe(p.definition);
-    if (p.kind === "new") {
-      console.log(`\n  + ${name}  (new tool, first seen ${p.seenAt})`);
+    if (p.kind === "new" || p.kind === "flagged") {
+      const why = p.kind === "flagged" ? "hidden instruction on first sight" : "new tool";
+      console.log(`\n  + ${name}  (${why}, first seen ${p.seenAt})`);
       console.log(`      description: ${next.description || "(none)"}`);
       continue;
     }

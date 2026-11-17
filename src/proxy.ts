@@ -27,11 +27,13 @@ export class LineSplitter {
   }
 }
 
-/** Quote one argument for cmd.exe so spaces and shell characters stay literal. */
+/** Quote one argument for cmd.exe so spaces, shell characters, and percent signs stay literal. */
 export function quoteForWindowsShell(arg: string): string {
-  if (arg.length > 0 && !/[\s"&|<>^()%!,;=]/.test(arg)) return arg;
+  // cmd.exe expands %VAR% even inside quotes. Doubling each percent makes it literal.
+  const literal = arg.replace(/%/g, "%%");
+  if (literal.length > 0 && !/[\s"&|<>^()%!,;=]/.test(literal)) return literal;
   // Double any backslashes that come before a quote or the end, then escape the quotes.
-  const escaped = arg.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/, "$1$1");
+  const escaped = literal.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/, "$1$1");
   return `"${escaped}"`;
 }
 
@@ -71,8 +73,17 @@ export function runProxy(firewall: Firewall, command: string, args: string[]): P
       if (process.stdout.writable) process.stdout.write(line + "\n");
     };
     // If the client goes away, stop the server too instead of crashing on a broken pipe.
+    const stopChild = (sig: NodeJS.Signals) => {
+      // Windows can kill with SIGTERM. SIGHUP is not a kill signal there.
+      const use: NodeJS.Signals = process.platform === "win32" && sig === "SIGHUP" ? "SIGTERM" : sig;
+      try {
+        child.kill(use);
+      } catch {
+        /* the child has already exited */
+      }
+    };
     process.stdout.on("error", () => {
-      child.kill("SIGTERM");
+      stopChild("SIGTERM");
       finish(0);
     });
     const toServer = (line: string) => {
@@ -144,7 +155,11 @@ export function runProxy(firewall: Firewall, command: string, args: string[]): P
     });
 
     for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
-      process.on(sig, () => child.kill(sig));
+      try {
+        process.on(sig, () => stopChild(sig));
+      } catch {
+        /* this platform does not emit that signal */
+      }
     }
   });
 }
