@@ -124,6 +124,28 @@ function isLocalHost(hostHeader: string | undefined): boolean {
   return host === "127.0.0.1" || host === "localhost" || host === "[::1]";
 }
 
+/**
+ * The MCP endpoint itself is the target URL. Any other path, such as OAuth
+ * discovery, is fetched on the target's origin so a relative sign-in URL still
+ * reaches the server that issued it.
+ */
+export function upstreamUrl(target: string, reqUrl: string | undefined): string {
+  const base = new URL(target);
+  const incoming = new URL(reqUrl && reqUrl.length > 0 ? reqUrl : "/", "http://127.0.0.1");
+  const targetPath = base.pathname.replace(/\/+$/, "") || "/";
+  const incomingPath = incoming.pathname.replace(/\/+$/, "") || "/";
+  const endpoint =
+    incomingPath === "/" ||
+    incomingPath === targetPath ||
+    (targetPath !== "/" && incomingPath.endsWith(targetPath));
+  if (endpoint) {
+    const url = new URL(base.href);
+    if (incoming.search) url.search = incoming.search;
+    return url.href;
+  }
+  return new URL(incoming.pathname + incoming.search, base.origin).href;
+}
+
 function isLocalOrigin(origin: string | undefined): boolean {
   if (!origin) return true; // non-browser clients send no Origin
   try {
@@ -198,7 +220,7 @@ export function startHttpProxy(firewall: Firewall, opts: HttpProxyOptions): Prom
 
     let upstream: Response;
     try {
-      upstream = await fetch(opts.target, {
+      upstream = await fetch(upstreamUrl(opts.target, req.url), {
         method,
         headers,
         body: method === "GET" || method === "HEAD" ? undefined : body,

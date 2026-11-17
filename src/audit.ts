@@ -8,6 +8,7 @@ export type AuditEvent =
   | "pinned"
   | "tool_changed"
   | "tool_new"
+  | "tool_flagged"
   | "tool_removed"
   | "definition_warning"
   | "call"

@@ -200,7 +200,7 @@ With no flow rules, a credential moving between servers is reported and other va
 
 ## How it works
 
-- **Pins** live in `~/.toolwarden/pins/<server>.json`: a SHA-256 hash of each tool definition, with keys sorted so reordering does not count as a change. The first listing may span pages. toolwarden keeps trusting that listing only while each request continues the cursor the server just returned, and for at most 32 pages. A different listing, or a page past that bound, is reviewed like any later change. A call to a tool that was never listed is blocked.
+- **Pins** live in `~/.toolwarden/pins/<server>.json`: a SHA-256 hash of each tool definition, with keys sorted so reordering does not count as a change. The first listing may span pages. toolwarden keeps trusting that listing only while each request continues the cursor the server just returned, and for at most 32 pages. A tool in that listing whose definition matches a hidden-instruction check is not pinned. A different listing, or a page past that bound, is reviewed like any later change. A call to a tool that was never listed is blocked.
 - **The audit log** is `~/.toolwarden/audit.log`, one JSON object per line. Credential-shaped values in call arguments are removed before they are written, including an object key and one layer of percent-encoding or base64.
 - **Flow tracking** stores only hashes of the values a server returned or showed in a tool definition, its introduction, or a resource, prompt, or template description, for 30 minutes, in `~/.toolwarden/flow/`.
 - Files are created readable only by you.
@@ -209,11 +209,11 @@ With no flow rules, a credential moving between servers is reported and other va
 
 A security tool should be clear about its limits.
 
-- **The first version of a tool is trusted.** Pinning catches *changes*. If a server is malicious on day one, pinning will not stop it. The hidden-instruction checks help here, but they are heuristics, and they warn without blocking.
-- **The checks are pattern matching.** Argument rules, result checks and flow tracking stop the obvious cases. One layer of percent-encoding is decoded before those checks, because a server decodes a path before it opens it. One layer of base64 is decoded too, including URL-safe and unpadded text, text written with a compatibility or invisible character, and text nested in a list or an object. A credential path stored that way is denied. Values encoded another way, split up, reworded, or built by the server itself can still get past them. Flow tracking follows distinctive tokens (keys, IDs), not ordinary prose.
+- **A clean first listing is the baseline.** Pinning catches *changes*. A tool whose first definition matches a hidden-instruction check is hidden until you review it. A first definition that does not match those checks is still trusted, and a reworded instruction can still get through.
+- **The checks are pattern matching.** Argument rules, result checks and flow tracking stop the obvious cases. One layer of percent-encoding is decoded before those checks, because a server decodes a path before it opens it. One layer of base64 is decoded too, including URL-safe and unpadded text, text written with a compatibility or invisible character, and text nested in a list or an object. A credential path stored that way is denied. One layer of HTML character references and of `\u` or `\x` escapes is decoded too. Look-alike letters are folded, and text split by separators or across adjacent strings in a list is joined before the check. A phrase that is reworded, or built by the server without sending the text, can still get past them. Flow tracking follows distinctive tokens (keys, IDs), not ordinary prose.
 - **A notice is advice to the model.** In the default `annotate` mode, suspicious text from a server still reaches the model with a warning in front. That includes tool, resource, and prompt output and the other server messages described above. Use `--results block` to withhold it.
-- **Remote servers that need a browser sign-in (OAuth)** are passed through, but the sign-in flow has not been tested through the proxy.
-- **Tested on Linux and macOS**, against the official filesystem and "everything" servers with the official MCP client. **Windows support is experimental.**
+- **Remote servers that need a browser sign-in (OAuth)** are passed through. The proxy forwards the sign-in challenge, a discovery path on that server's origin, a redirect, and the token the client sends back. It does not sign in for you.
+- **Tested on Linux, macOS, and Windows**, against the official filesystem and "everything" servers with the official MCP client. On Windows, state files rely on the user profile's permissions, because Unix file modes are not applied.
 
 It is one layer. Keep giving servers the least access they need, and be careful with servers you did not write.
 

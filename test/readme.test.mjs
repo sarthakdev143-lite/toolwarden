@@ -16,7 +16,10 @@ test("the install guide states each behavior once", () => {
   assert.match(readme, /treat it as data/);
   assert.match(readme, /nothing from the vault server may go to the web server/);
   assert.match(readme, /One layer of percent-encoding is decoded/);
-  assert.match(readme, /Values encoded another way/);
+  assert.match(readme, /A phrase that is reworded, or built by the server without sending the text/);
+  assert.match(readme, /matches a hidden-instruction check is hidden until you review it/);
+  assert.match(readme, /forwards the sign-in challenge/);
+  assert.doesNotMatch(readme, /Windows support is experimental/);
   assert.match(readme, /Flow tracking follows distinctive tokens/);
   assert.match(readme, /`--results <mode>`/);
   assert.match(readme, /npm, pip, netrc, and git credentials/);

@@ -54,17 +54,21 @@ try to reach the dashboard or the HTTP proxy.
 
 ## Known limits
 
-**The first version of a tool is trusted.** Pinning detects change; it cannot tell that a
-definition was malicious from the start. The definition checks flag common tricks, but
-they warn and do not block. That first listing can span pages, but only along the cursor
-the server just issued, and only for 32 pages. A server that always advertises another
-page does not keep the first-use window open, and a call to a tool that was never listed
-is blocked.
+**A clean first listing is the baseline.** Pinning detects change. A first definition
+that matches a hidden-instruction check is hidden until someone reviews it. A first
+definition that does not match those checks is still trusted, so a reworded instruction
+can still get through on day one. That first listing can span pages, but only along the
+cursor the server just issued, and only for 32 pages. A server that always advertises
+another page does not keep the first-use window open, and a call to a tool that was
+never listed is blocked.
 
-**Pattern checks can be evaded.** One layer of percent-encoding is decoded before the
-checks, and one layer of base64 is decoded too, including URL-safe and unpadded text,
-text written with a compatibility or invisible character, and text nested in a list or
-object. A determined attacker can encode another way, split or reword. The argument
+**Pattern checks can be evaded by rewording.** One layer of percent-encoding is decoded
+before the checks, and one layer of base64 is decoded too, including URL-safe and
+unpadded text, text written with a compatibility or invisible character, and text nested
+in a list or object. One layer of HTML character references and of `\u` or `\x` escapes
+is decoded too. Look-alike letters are folded, and text split by separators or across
+adjacent strings in a list is joined before the check. A phrase that is reworded, or
+built by the server without sending the text, can still get past them. The argument
 rules, result checks and flow tracking raise the cost of an attack and catch the common
 forms; they are not a proof of safety.
 

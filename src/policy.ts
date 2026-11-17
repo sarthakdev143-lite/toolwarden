@@ -5,7 +5,7 @@ export interface Rule {
   id: string;
   /** Glob over the tool name. "*" matches anything, including a line break. Defaults to "*". */
   tool?: string;
-  /** Regular expression (case-insensitive) tested against every string in the call, other than a tool call's name, including object keys and one layer of base64 (URL-safe, unpadded, or written with a compatibility or invisible character) nested in a list or object, and image or audio data. Percent-encoding, compatibility characters, and invisible characters are folded before the test. */
+  /** Regular expression (case-insensitive) tested against every string in the call, other than a tool call's name, including object keys and one layer of base64 (URL-safe, unpadded, or written with a compatibility or invisible character) nested in a list or object, and image or audio data. Percent-encoding, HTML character references, slash-u escapes, compatibility characters, invisible characters, look-alike letters, and a token split by separators or across adjacent strings in a list are folded before the test. */
   pattern: string;
   /** "deny" blocks the call. "warn" lets it through and records a warning. Defaults to "deny". */
   action?: "deny" | "warn";

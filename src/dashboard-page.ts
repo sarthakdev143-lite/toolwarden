@@ -218,7 +218,7 @@ details.server .body { padding: 0 16px 14px; }
         var card = el("div", "card pending");
         var head = el("div", "card-head");
         head.appendChild(el("span", "tool", p.name));
-        head.appendChild(el("span", "badge bad", p.kind === "changed" ? "Changed after approval" : "New tool"));
+        head.appendChild(el("span", "badge bad", p.kind === "changed" ? "Changed after approval" : p.kind === "flagged" ? "First definition needs review" : "New tool"));
         head.appendChild(el("span", "meta", "on " + s.server + " · first seen " + new Date(p.seenAt).toLocaleString()));
         card.appendChild(head);
 
@@ -293,12 +293,12 @@ details.server .body { padding: 0 16px 14px; }
     });
   }
 
-  var BLOCKED = { call_blocked: 1, call_denied: 1, result_blocked: 1, flow_denied: 1, tool_changed: 1, tool_new: 1 };
+  var BLOCKED = { call_blocked: 1, call_denied: 1, result_blocked: 1, flow_denied: 1, tool_changed: 1, tool_new: 1, tool_flagged: 1 };
   var WARNED = { call_warning: 1, result_warning: 1, definition_warning: 1 };
   var LABELS = {
     call: ["Call", "plain"], call_blocked: ["Blocked", "bad"], call_denied: ["Denied", "bad"],
     result_blocked: ["Output blocked", "bad"], flow_denied: ["Flow denied", "bad"],
-    tool_changed: ["Tool changed", "bad"], tool_new: ["New tool", "bad"],
+    tool_changed: ["Tool changed", "bad"], tool_new: ["New tool", "bad"], tool_flagged: ["Needs review", "bad"],
     call_warning: ["Warning", "warn"], result_warning: ["Output warning", "warn"], definition_warning: ["Warning", "warn"],
     flow: ["Data flow", "plain"], pinned: ["Approved", "ok"], tool_removed: ["Tool removed", "plain"], session_start: ["Started", "plain"]
   };
@@ -320,6 +320,7 @@ details.server .body { padding: 0 16px 14px; }
         return "Carried " + (r.kind === "secret" ? "a credential" : "a value") + " that came from " + r.from + (r.rule ? " (rule " + r.rule + ")" : "");
       case "tool_changed": return "Its definition no longer matches what you approved";
       case "tool_new": return "Appeared after the server was first approved";
+      case "tool_flagged": return "Its first definition matched a hidden-instruction check";
       case "pinned": return r.count + (r.count === 1 ? " tool definition" : " tool definitions") + " recorded on first use";
       case "session_start": return (r.firstUse ? "First use" : "Session started") + ", " + r.mode + " mode";
       default: return "";

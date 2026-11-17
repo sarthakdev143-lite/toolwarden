@@ -12,8 +12,8 @@ export interface PendingEntry {
   hash: string;
   definition: unknown;
   seenAt: string;
-  /** "changed": differs from the pinned definition. "new": appeared after the first trusted listing. */
-  kind: "changed" | "new";
+  /** "changed": differs from the pinned definition. "new": appeared after the first listing. "flagged": the first definition matched a hidden-instruction check. */
+  kind: "changed" | "new" | "flagged";
 }
 
 export interface PinFile {
