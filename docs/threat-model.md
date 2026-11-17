@@ -98,3 +98,10 @@ tool may still be changing.
 - **Secrets are not stored.** Credential-shaped values are removed from the audit log,
   including an object key, a value written with a compatibility or invisible character, and one layer of percent-encoding or base64. Flow tracking keeps only hashes.
 - **Fail closed where it is safe to.** A changed tool is blocked until someone decides.
+
+## Hosted operator sign-in
+
+`npm start` stores accounts and sessions in `TOOLWARDEN_DATA` on the machine that runs it.
+It does not send telemetry. The session is an email and a password for this process.
+It is separate from OAuth that a remote MCP server asks the MCP client to complete.
+The pattern checks are the same checks as the local CLI. They do not stop every attack.

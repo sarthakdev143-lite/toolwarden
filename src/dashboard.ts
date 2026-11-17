@@ -1,8 +1,8 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { join } from "node:path";
 import { DASHBOARD_HTML } from "./dashboard-page.js";
+import { escapeHtml } from "./html.js";
+import { KNOWN_LIMITS, readAuditRecords, readDecisions, readOperatorAccount } from "./operator-view.js";
 import { approveReviewed, listServers, loadPins, savePins, type ReviewedTool } from "./pins.js";
 import { scanTool } from "./scan.js";
 
@@ -26,18 +26,7 @@ function describe(def: unknown): { description: string; schema: string } {
 }
 
 function readLog(stateDir: string, limit: number): Json[] {
-  const path = join(stateDir, "audit.log");
-  if (!existsSync(path)) return [];
-  const lines = readFileSync(path, "utf8").split("\n").filter(Boolean).slice(-limit);
-  const out: Json[] = [];
-  for (const line of lines) {
-    try {
-      out.push(JSON.parse(line) as Json);
-    } catch {
-      /* skip a damaged line */
-    }
-  }
-  return out;
+  return readAuditRecords(stateDir, limit);
 }
 
 function buildState(stateDir: string): Json {
@@ -71,6 +60,9 @@ function buildState(stateDir: string): Json {
   const recent = readLog(stateDir, 20000).filter((r) => Date.parse(String(r.ts)) >= dayAgo);
   const count = (events: string[]) => recent.filter((r) => events.includes(String(r.event))).length;
   return {
+    account: readOperatorAccount(stateDir),
+    decisions: readDecisions(stateDir),
+    limits: [...KNOWN_LIMITS],
     servers,
     stats: {
       calls: count(["call"]),
@@ -166,7 +158,11 @@ export function startDashboard(stateDir: string, port: number, token = randomByt
           "x-frame-options": "DENY",
           "content-security-policy": `default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}'; connect-src 'self'; base-uri 'none'; form-action 'none'`,
         })
-        .end(DASHBOARD_HTML.replaceAll("__NONCE__", nonce));
+        .end(
+          DASHBOARD_HTML.replaceAll("__NONCE__", nonce)
+            .split("__LIMITS__")
+            .join(KNOWN_LIMITS.map((line) => `<li>${escapeHtml(line)}</li>`).join("")),
+        );
       return;
     }
 
