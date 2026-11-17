@@ -104,4 +104,6 @@ tool may still be changing.
 `npm start` stores accounts and sessions in `TOOLWARDEN_DATA` on the machine that runs it.
 It does not send telemetry. The session is an email and a password for this process.
 It is separate from OAuth that a remote MCP server asks the MCP client to complete.
+When `TOOLWARDEN_MCP_URL` is set, `/mcp` forwards a signed-in account to that server
+and writes pins in that account's state directory. The session is not sent upstream.
 The pattern checks are the same checks as the local CLI. They do not stop every attack.

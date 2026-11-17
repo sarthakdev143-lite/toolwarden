@@ -23,8 +23,8 @@ credited in the release notes, unless you would rather not be.
 - A way to reach the server with a call that a deny rule should have stopped
 - A way for a web page or another local user to read the audit log, approve a change,
   or use the HTTP proxy or dashboard
-- A way for one operator account to read another account's state, or to use the hosted
-  admin without that account's session
+- A way for one operator account to read another account's state, to use the hosted
+  admin without that account's session, or to proxy MCP through another account's pins
 - Credentials ending up in the audit log, the flow files, or the dashboard
 - Anything that makes `toolwarden init` damage a config file beyond what `--undo` restores
 

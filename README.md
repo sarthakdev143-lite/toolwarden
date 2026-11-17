@@ -240,6 +240,7 @@ npm start
 | `TOOLWARDEN_DATA` | Accounts, sessions, and each account's pins and audit log. Default `~/.toolwarden-data`. This is not the local CLI directory `~/.toolwarden`. |
 | `TOOLWARDEN_PUBLIC_URL` | Optional URL you give operators. When it starts with `https://`, the session cookie is marked Secure. |
 | `TOOLWARDEN_SIGNUP` | `open` (default) lets anyone who can reach the URL create an account. `closed` refuses new accounts. Existing accounts can still sign in. Create the accounts, then restart with `closed`. |
+| `TOOLWARDEN_MCP_URL` | Optional URL of one remote MCP server. When it is set, a signed-in account can point an AI app at `/mcp` on this process. Pins and the audit log go in that account's state directory. |
 
 Open the printed URL. Create an account with an email and a password. That session belongs to the person operating toolwarden. It is not the OAuth sign-in a remote MCP server may ask the AI app for.
 
@@ -253,7 +254,9 @@ toolwarden dashboard --account you@example.com
 
 `/admin` shows the signed-in account, recent decisions from that account's audit log, and the known limits. The local dashboard shows the same three things for the state directory it was given.
 
-Hosting this service does not change the scanner. The checks do not stop every attack. There is no payment provider and no SSO vendor. This build does not verify email or reset a lost password. There is no organization, role, or shared membership. One account is one person and one state directory. This process does not proxy MCP traffic. Keep using `toolwarden run` or `toolwarden http` for each server. Terminate TLS in your own proxy if operators connect over the network. One process should own `TOOLWARDEN_DATA`.
+With `TOOLWARDEN_MCP_URL` set, `/admin` also shows the MCP URL and a header, `x-toolwarden-session`, whose value is that account's session. The AI app sends the header on each request to `/mcp`. The browser cookie is the same session. This process does not forward that session to the MCP server. An `Authorization` header is still forwarded, because that belongs to the MCP server's own sign-in. `toolwarden run` and `toolwarden http` stay available for a server that is not this one URL.
+
+Hosting this service does not change the scanner. The checks do not stop every attack. There is no payment provider and no SSO vendor. This build does not verify email or reset a lost password. There is no organization, role, or shared membership. One account is one person and one state directory. The hosted proxy uses the default block and annotate modes. Terminate TLS in your own proxy if operators connect over the network. One process should own `TOOLWARDEN_DATA`.
 
 ## Development
 

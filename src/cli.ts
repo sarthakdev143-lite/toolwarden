@@ -30,7 +30,7 @@ Usage:
   toolwarden approve <server> [tool...]          Approve the definitions waiting right now (all of them if none are named)
   toolwarden log [-n <count>]                    Show recent audit log entries
   toolwarden dashboard [--port 7878]             Open a local web page for reviews and the log
-  toolwarden serve                               Listen for operator sign-in until stopped
+  toolwarden serve                               Listen for operator sign-in, and proxy MCP when configured
 
 Options for "run" and "http":
   --name <id>          Name for this server (default: derived from the command or URL)
@@ -50,7 +50,7 @@ Options for "status", "approve", "log", and "dashboard":
   --state <dir>        Same directory as "run" and "http"
   --account <email>    Same account directory as "run" and "http"
 
-"serve" reads HOST, PORT, TOOLWARDEN_DATA, TOOLWARDEN_PUBLIC_URL, and TOOLWARDEN_SIGNUP from the environment.
+"serve" reads HOST, PORT, TOOLWARDEN_DATA, TOOLWARDEN_PUBLIC_URL, TOOLWARDEN_SIGNUP, and TOOLWARDEN_MCP_URL from the environment.
 
 Options for "http":
   --target <url>       The remote MCP server's URL
@@ -479,7 +479,7 @@ async function cmdDashboard(argv: string[]): Promise<number> {
 
 async function cmdServe(argv: string[]): Promise<number> {
   if (argv.length > 0) {
-    fail('serve reads HOST, PORT, TOOLWARDEN_DATA, TOOLWARDEN_PUBLIC_URL, and TOOLWARDEN_SIGNUP from the environment');
+    fail('serve reads HOST, PORT, TOOLWARDEN_DATA, TOOLWARDEN_PUBLIC_URL, TOOLWARDEN_SIGNUP, and TOOLWARDEN_MCP_URL from the environment');
   }
   const host = process.env.HOST ?? "0.0.0.0";
   if (host === "") fail("HOST must be an address");
@@ -493,6 +493,7 @@ async function cmdServe(argv: string[]): Promise<number> {
       dataDir: process.env.TOOLWARDEN_DATA ?? join(homedir(), ".toolwarden-data"),
       publicUrl: process.env.TOOLWARDEN_PUBLIC_URL,
       signup: process.env.TOOLWARDEN_SIGNUP,
+      mcpUrl: process.env.TOOLWARDEN_MCP_URL,
     });
   } catch (err) {
     fail((err as Error).message);

@@ -1,14 +1,23 @@
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
+import { existsSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { join } from "node:path";
 import { AccountError, AccountStore, type PublicAccount } from "./accounts.js";
 import { adminPage, signInPage } from "./admin-page.js";
+import { AuditLog } from "./audit.js";
+import { Firewall } from "./firewall.js";
+import { FlowTracker } from "./flow.js";
+import { proxyHttp } from "./http.js";
 import { KNOWN_LIMITS, readDecisions } from "./operator-view.js";
+import { slug } from "./pins.js";
+import { loadPolicy } from "./policy.js";
 
 /**
  * The long-lived operator service. `npm start` and `toolwarden serve` both
  * call this and keep listening. It signs in the person operating toolwarden.
- * It does not complete OAuth for an MCP server, and it does not proxy MCP
- * traffic. That stays on `toolwarden run` and `toolwarden http`.
+ * When TOOLWARDEN_MCP_URL is set, `/mcp` forwards that account's traffic to
+ * the MCP server and keeps pins in the account's own state directory.
+ * It does not complete OAuth for the MCP server. That challenge is forwarded.
  */
 
 export interface HostedOptions {
@@ -17,6 +26,8 @@ export interface HostedOptions {
   dataDir: string;
   publicUrl?: string;
   signup?: string;
+  /** Remote MCP server. Unset leaves sign-in up and does not proxy. */
+  mcpUrl?: string;
 }
 
 export interface Hosted {
@@ -39,6 +50,40 @@ function signupMode(value: string | undefined): "open" | "closed" {
   if (value === undefined || value === "" || value === "open") return "open";
   if (value === "closed") return "closed";
   throw new Error('TOOLWARDEN_SIGNUP must be "open" or "closed"');
+}
+
+function checkedMcpUrl(value: string | undefined): string | undefined {
+  if (value === undefined || value === "") return undefined;
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error("TOOLWARDEN_MCP_URL is not a valid URL");
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error("TOOLWARDEN_MCP_URL must start with http:// or https://");
+  }
+  return value;
+}
+
+function mcpServerName(target: string): string {
+  const digest = createHash("sha256").update(target).digest("hex").slice(0, 8);
+  return slug(new URL(target).hostname) + "-" + digest;
+}
+
+/** The hosted MCP path is `/mcp`. Other paths stay on the upstream origin, as the local proxy does. */
+function upstreamRequestUrl(pathname: string, search: string): string {
+  if (pathname === "/mcp" || pathname === "/mcp/") return "/" + search;
+  return pathname + search;
+}
+
+function mcpClientUrl(publicUrl: string | undefined): string {
+  if (!publicUrl) return "/mcp";
+  const url = new URL(publicUrl);
+  url.pathname = "/mcp";
+  url.search = "";
+  url.hash = "";
+  return url.href;
 }
 
 function checkedPublicUrl(value: string | undefined): string | undefined {
@@ -102,6 +147,13 @@ function cookieValue(header: string | string[] | undefined, name: string): strin
   return undefined;
 }
 
+function presentedSession(req: IncomingMessage): string | undefined {
+  const header = req.headers["x-toolwarden-session"];
+  if (Array.isArray(header)) return undefined;
+  if (typeof header === "string" && header !== "") return header;
+  return cookieValue(req.headers.cookie, "toolwarden_session");
+}
+
 function sessionCookie(id: string, maxAge: number, secure: boolean): string {
   const parts = [`toolwarden_session=${encodeURIComponent(id)}`, "HttpOnly", "SameSite=Lax", "Path=/", `Max-Age=${maxAge}`];
   if (secure) parts.push("Secure");
@@ -149,8 +201,34 @@ function redirect(res: ServerResponse, location: string, cookie?: string): void 
 export function startHosted(opts: HostedOptions): Promise<Hosted> {
   const signup = signupMode(opts.signup);
   const publicUrl = checkedPublicUrl(opts.publicUrl);
+  const mcpUrl = checkedMcpUrl(opts.mcpUrl);
   const secure = publicUrl?.startsWith("https://") ?? false;
   const store = new AccountStore(opts.dataDir);
+  const firewalls = new Map<string, Firewall>();
+
+  const firewallFor = (account: PublicAccount): Firewall => {
+    const cached = firewalls.get(account.id);
+    if (cached) return cached;
+    if (!mcpUrl) throw new Error("no MCP server is configured");
+    const policyPath = join(account.stateDir, "policy.json");
+    const policy = loadPolicy(existsSync(policyPath) ? policyPath : null, true);
+    const serverName = mcpServerName(mcpUrl);
+    const audit = new AuditLog(account.stateDir, serverName, (line) => {
+      process.stderr.write(line + "\n");
+    });
+    const firewall = new Firewall({
+      server: serverName,
+      command: mcpUrl,
+      stateDir: account.stateDir,
+      mode: "block",
+      policy,
+      audit,
+      results: "annotate",
+      flow: new FlowTracker(account.stateDir, serverName),
+    });
+    firewalls.set(account.id, firewall);
+    return firewall;
+  };
 
   const currentAccount = (req: IncomingMessage): PublicAccount | null => {
     const id = cookieValue(req.headers.cookie, "toolwarden_session");
@@ -194,7 +272,9 @@ export function startHosted(opts: HostedOptions): Promise<Hosted> {
         return;
       }
       const value = nonce();
-      html(res, 200, adminPage(value, account, readDecisions(account.stateDir)), value);
+      const sessionId = cookieValue(req.headers.cookie, "toolwarden_session") ?? "";
+      const mcp = mcpUrl ? { clientUrl: mcpClientUrl(publicUrl), sessionId } : null;
+      html(res, 200, adminPage(value, account, readDecisions(account.stateDir), mcp), value);
       return;
     }
 
@@ -263,8 +343,45 @@ export function startHosted(opts: HostedOptions): Promise<Hosted> {
         return;
       }
       const session = store.createSession(account.id);
-      // A posted `next` is ignored. The only signed-in page is this server's admin.
+      // A posted `next` is ignored. Sign-in always lands on this server's admin page.
       redirect(res, "/admin", sessionCookie(session.id, session.maxAgeSeconds, secure));
+      return;
+    }
+
+    // Operator pages stay here. /mcp is the firewall. Any other path is the upstream
+    // origin (OAuth discovery and the sign-in challenge), and only for a signed-in account.
+    const operatorPath = url.pathname === "/" || url.pathname === "/login" || url.pathname === "/signup" || url.pathname === "/logout" || url.pathname === "/admin" || url.pathname === "/api/admin";
+    const mcpPath = url.pathname === "/mcp" || url.pathname === "/mcp/";
+    const proxied = !operatorPath && (mcpPath || mcpUrl !== undefined);
+    if (proxied && mcpUrl) {
+      let account: PublicAccount | null;
+      try {
+        account = store.accountForSession(presentedSession(req) ?? "");
+      } catch (err) {
+        res.writeHead(500, { "content-type": "text/plain; charset=utf-8" }).end((err as Error).message + "\n");
+        return;
+      }
+      if (!account) {
+        res.writeHead(401, { "content-type": "text/plain; charset=utf-8" }).end("sign in to proxy MCP\n");
+        return;
+      }
+      // The operator session must not be sent to the MCP server. Authorization still is:
+      // that header belongs to the MCP server's own sign-in, not this account.
+      delete req.headers.cookie;
+      delete req.headers["x-toolwarden-session"];
+      let firewall: Firewall;
+      try {
+        firewall = firewallFor(account);
+      } catch (err) {
+        res.writeHead(500, { "content-type": "text/plain; charset=utf-8" }).end((err as Error).message + "\n");
+        return;
+      }
+      await proxyHttp(firewall, mcpUrl, req, res, upstreamRequestUrl(url.pathname, url.search));
+      return;
+    }
+
+    if (url.pathname === "/mcp" || url.pathname === "/mcp/") {
+      res.writeHead(404, { "content-type": "text/plain; charset=utf-8" }).end("no MCP server is configured\n");
       return;
     }
 
